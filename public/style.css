@@ -12,6 +12,8 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* 给滚动条永久留位：内容变长变短时滚动条出现/消失会让整页左右晃一下 */
+html { scrollbar-gutter: stable; }
 body {
   font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
   background: #f4f2f8;
@@ -341,6 +343,131 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 :root[data-theme="dark"] .btn.次 { background: #3a3545; }
 :root[data-theme="dark"] .btn.黄 { background: #d99a1b; }
 :root[data-theme="dark"] .btn.紫 { background: #7a5cc0; }
+
+/* 斑马纹表格：账单类宽表列多，隔行填底色，眼睛不容易串行 */
+/* 用 td 而不是 tr 上色，免得盖掉 sticky 表头；只染偶数行，奇数行保持卡片底色 */
+table.斑马 tr:nth-child(even) td { background: var(--灰); }
+table.斑马 tr:hover td { background: #e6f4fb; }        /* 悬停整行提亮，指哪读哪 */
+:root[data-theme="dark"] table.斑马 tr:hover td { background: #23303a; }
+
+/* 日租房态图（EBK 式）：一间房一张卡，颜色 = 状态。绿=在住、黄=脏房、无色=可用 */
+.房态网格 { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px; margin-top: 14px; }
+.房态卡 {
+  display: flex; flex-direction: column; gap: 8px; min-height: 132px;
+  padding: 12px; border: 1px solid var(--边框); border-left: 4px solid var(--边框);
+  border-radius: 12px; background: var(--卡片); color: var(--文字);
+  font-family: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: transform .08s, box-shadow .08s;
+}
+.房态卡:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.房态卡.在住 { background: #dcfce7; border-color: #86d29a; border-left-color: var(--绿); }
+.房态卡.脏房 { background: #fef9c3; border-color: #e2cf72; border-left-color: #d99a1b; }
+.房态卡头 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.房态卡头 b { font-size: 20px; font-weight: 800; letter-spacing: .5px; }
+.房态卡身 { display: flex; flex-direction: column; gap: 3px; }
+.房态签 { padding: 2px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.房态签.在住 { background: #15803d; color: #fff; }
+.房态签.脏房 { background: #a16207; color: #fff; }
+.房态签.空闲 { background: var(--灰); color: var(--次文字); }
+.房态客人 { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.房态客人.淡 { color: var(--次文字); font-weight: 600; }
+.房态行 { font-size: 12px; color: var(--次文字); }
+.房态卡.在住 .房态行, .房态卡.脏房 .房态行 { color: #4a4a4a; }
+.房态行.警 { color: #b91c1c; font-weight: 600; }
+.房态行.淡 { opacity: .75; }
+.房态钱 { margin-top: 2px; font-size: 16px; font-weight: 800; color: #15803d; }
+/* 暗黑：卡片底色压深，文字反过来提亮 */
+:root[data-theme="dark"] .房态卡.在住 { background: #14321a; border-color: #2c5c34; }
+:root[data-theme="dark"] .房态卡.脏房 { background: #3a2f0a; border-color: #6b5613; }
+:root[data-theme="dark"] .房态卡.在住 .房态行,
+:root[data-theme="dark"] .房态卡.脏房 .房态行 { color: #c9c3d3; }
+:root[data-theme="dark"] .房态签.在住 { background: #6fd06f; color: #10240f; }
+:root[data-theme="dark"] .房态签.脏房 { background: #f0c542; color: #2a2410; }
+:root[data-theme="dark"] .房态钱 { color: #6fd06f; }
+:root[data-theme="dark"] .房态行.警 { color: #f28b82; }
+
+/* 办入住第一步：全日房 / 钟点房，两张图标卡二选一 */
+.房型区 { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.房型选 { display: flex; gap: 10px; }
+.房型卡 {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 104px; padding: 12px 8px;
+  border: 2px solid var(--边框); border-radius: 12px;
+  background: var(--卡片); color: var(--文字);
+  font-family: inherit; cursor: pointer; transition: border-color .1s, background .1s;
+}
+.房型卡:hover { border-color: var(--主色); }
+.房型卡.选中 { border-color: var(--主色); background: rgba(0,164,220,.10); }
+.房型图 { font-size: 26px; line-height: 1; }
+.房型名 { font-size: 14px; font-weight: 600; }
+.房型卡.选中 .房型名 { color: var(--主色); }
+:root[data-theme="dark"] .房型卡.选中 { background: rgba(0,164,220,.18); }
+
+/* 办入住的多客人登记：一位一行，末尾是 +/− */
+.客人行 { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+.客人加减 { padding: 8px 14px; font-size: 18px; line-height: 1; height: 38px; }
+@media (max-width: 600px) {
+  .客人行 { grid-template-columns: 1fr 1fr; }
+  .客人加减 { grid-column: 2; justify-self: end; }
+}
+/* 重名客人选择：一张一张列出来点选 */
+.客人候选区 { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; margin-bottom: 12px; }
+.客人候选 {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px 12px;
+  border: 1px solid var(--边框); border-radius: 10px; background: var(--卡片); color: var(--文字);
+  font-family: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.客人候选:hover { border-color: var(--主色); background: var(--灰); }
+.客人候选行 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.客人候选行 b { font-size: 15px; }
+.客人候选行 span { color: var(--次文字); }
+.客人候选行 i { color: var(--次文字); font-style: normal; font-size: 12px; }
+/* 房态卡上的「3人」小标 */
+.房态人数 { margin-left: 6px; padding: 1px 7px; border-radius: 10px; background: rgba(0,0,0,.12); font-size: 12px; font-weight: 600; }
+:root[data-theme="dark"] .房态人数 { background: rgba(255,255,255,.16); }
+
+/* 设置页：左目录树 + 右详情。只用 CSS 变量，暗黑自动跟随 */
+.设置布局 { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 14px; align-items: start; }
+.设置目录 {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--卡片); border: 1px solid var(--边框); border-radius: 12px;
+  padding: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  /* 不用 sticky：详情区高度差很大（主题页很矮、参数页很长），吸附定位在切换时会跟着上下弹 */
+}
+.设置项 {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border: 0; border-left: 3px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--文字); font-family: inherit; font-size: 14px;
+  text-align: left; cursor: pointer;
+}
+.设置项:hover { background: var(--灰); }
+.设置项.激活 { background: var(--灰); border-left-color: var(--主色); }
+.设置项.激活 .设置项文字 b { color: var(--主色); }
+.设置项图标 { font-size: 17px; flex: 0 0 auto; line-height: 1; }
+.设置项文字 { min-width: 0; }
+.设置项文字 b { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.设置详情 > .卡片:last-child { margin-bottom: 0; }
+/* 窄屏：目录改成顶部横向滚动条，副标题省掉 */
+@media (max-width: 760px) {
+  .设置布局 { grid-template-columns: 1fr; }
+  .设置目录 { position: static; flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px; }
+  .设置项 { flex: 0 0 auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; }
+  .设置项.激活 { border-left-color: transparent; border-bottom-color: var(--主色); }
+}
+
+/* 更新日志弹窗：内容多了在框内滚动，标题和关闭按钮不跟着跑 */
+.日志滚动区 {
+  max-height: 60vh; overflow-y: auto;
+  background: var(--灰); border: 1px solid var(--边框); border-radius: 8px;
+  padding: 12px 14px;
+}
+.日志段 { padding: 8px 0; border-bottom: 1px dashed var(--边框); }
+.日志段:last-child { border-bottom: 0; }
+.日志段头 { display: flex; align-items: baseline; gap: 8px; }
+.日志段头 b { font-size: 15px; color: var(--主色); }
+.日志段头 span { font-size: 12px; color: var(--次文字); }
+.日志段 ul { list-style: disc; margin: 6px 0 0 20px; font-size: 13px; }
+.日志段 li { margin: 3px 0; }
 
 /* 在线更新卡片：只用现有 CSS 变量，暗黑模式自动跟随，不用额外写覆盖规则 */
 .更新日志区 {

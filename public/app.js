@@ -13,6 +13,12 @@ function 精金额(n) { return String(Math.round((Number(n) || 0) * 100) / 100);
 // 短日期："2026-08-24" → "8月24日"（房租单日期列用）
 function 短日期(日期) { if (!日期) return '—'; const [, m, d] = String(日期).split('-'); return `${Number(m)}月${Number(d)}日`; }
 function 今天() { return new Date().toISOString().slice(0, 10); }
+// 日租营业日：早 6 点换日（26 日 6:00 ~ 27 日 5:59 都算 26 日）。用本地时间，不能用 toISOString（那是 UTC）
+function 营业日(时刻) {
+  const d = 时刻 ? new Date(时刻) : new Date();
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 // 某日期距今天多少天（今天=0，昨天=1，前天=2…）。按日期字符串拆年月日算，避免时区偏移把结果带偏
 function 距今天数(日期) {
   const [y, m, d] = String(日期 || '').slice(0, 10).split('-').map(Number);
@@ -43,6 +49,67 @@ function 表单快照(根) {
   return [...根.querySelectorAll('input, select, textarea')]
     .map(el => (el.type === 'checkbox' || el.type === 'radio') ? (el.checked ? '1' : '0') : el.value)
     .join('');
+}
+
+// ============ 客人档案：按姓名带出身份证 / 电话 ============
+// 用在「日租办入住」和「月租添加/编辑租客」两处。姓名框失焦就查，只填空着的框，不覆盖已输入的内容。
+window.带出客人 = function(名框id, 证框id, 话框id, 备注框id) {
+  return 带出客人到(document.getElementById(名框id), document.getElementById(证框id),
+    document.getElementById(话框id), 备注框id ? document.getElementById(备注框id) : null);
+};
+async function 带出客人到(名框, 证框, 话框, 备注框) {
+  if (!名框) return;
+  const 名 = 名框.value.trim();
+  if (!名) return;
+  // 该填的框都已经填了就别打扰用户
+  const 空着 = [证框, 话框, 备注框].some(框 => 框 && !框.value.trim());
+  if (!空着) return;
+  const r = await api('/api/guests?name=' + encodeURIComponent(名)).catch(() => null);
+  const 候选 = (r && r.候选) || [];
+  // 没带出档案就把旧标记清掉，否则换了个新名字还挂着上一位的 档案id，保存时会覆盖错人
+  if (!候选.length) { delete 名框.dataset.档案id; return; }
+  let 选中 = 候选[0];
+  if (候选.length > 1) {                           // 同名多人 → 让用户挑，也可以按新人录入
+    选中 = await 选客人档案(名, 候选);
+    if (!选中) { delete 名框.dataset.档案id; return; }   // 选「都不是」= 按新客人录
+  }
+  // 记住这条是从哪份档案带出来的：保存时带回后端，改了字段就覆盖那条，不新增
+  名框.dataset.档案id = 选中.id;
+  const 填了 = [];
+  if (证框 && !证框.value.trim() && 选中.身份证) { 证框.value = 选中.身份证; 填了.push('身份证'); }
+  if (话框 && !话框.value.trim() && 选中.电话) { 话框.value = 选中.电话; 填了.push('电话'); }
+  if (备注框 && !备注框.value.trim() && 选中.备注) { 备注框.value = 选中.备注; 填了.push('备注'); }
+  if (填了.length) 提示(`已带出${名}的${填了.join('、')}`);
+}
+// 重名时的选择框：独立一层（.确认遮罩），不能用 打开模态——那会把底下的入住/租客表单一起清掉
+function 选客人档案(姓名, 候选) {
+  return new Promise(resolve => {
+    const 窗 = document.createElement('div');
+    窗.className = '确认遮罩';
+    窗.innerHTML = `<div class="确认框" style="max-width:520px;text-align:left">
+      <h3>「${转义(姓名)}」有 ${候选.length} 条登记记录</h3>
+      <p style="margin-bottom:10px">选一位带出他的身份证和电话；如果都不是同一个人，就按新客人录入。</p>
+      <div class="客人候选区">
+        ${候选.map((c, i) => `<button class="客人候选" data-选择="${i}">
+          <div class="客人候选行"><b>${转义(c.姓名)}</b><i>${转义(时刻(c.更新时间) || '')}</i></div>
+          <div class="客人候选行"><span>身份证 ${转义(c.身份证 || '—')}</span></div>
+          <div class="客人候选行"><span>电话 ${转义(c.电话 || '—')}</span></div>
+          ${c.备注 ? `<div class="客人候选行"><span>备注 ${转义(c.备注)}</span></div>` : ''}
+        </button>`).join('')}
+      </div>
+      <div class="确认按钮组">
+        <button class="btn 次" data-选择="新">都不是，按新客人录入</button>
+      </div>
+    </div>`;
+    document.body.appendChild(窗);
+    窗.addEventListener('click', e => {
+      const 钮 = e.target.closest('[data-选择]');
+      if (!钮) return;
+      窗.remove();
+      const 值 = 钮.dataset.选择;
+      resolve(值 === '新' ? null : 候选[Number(值)]);
+    });
+  });
 }
 
 function 打开模态(html) {
@@ -116,7 +183,7 @@ function 询问确认(标题, 内容 = '') {
 }
 
 // 通用可折叠卡片：备忘录/空置房间/房源信息共用。收起状态只在本次会话内保留，刷新页面回到默认展开
-let 折叠状态 = {};
+let 折叠状态 = { 房源: true };   // 房源信息默认收起：清单长，平时不用看
 function 折叠卡片(键, 标题HTML, 内容HTML) {
   const 收起 = !!折叠状态[键];
   return `<div class="卡片">
@@ -139,13 +206,12 @@ let 当前页 = '总览';
 let 启用删除 = false; // 删除模式开关：勾选后各页面的删除/撤销按钮才显示
 
 // ============ 在线更新 ============
-let 当前版本信息 = null;   // 当前运行版本，每次渲染设置tab时刷新（{版本,提交,日期}）
+let 当前版本信息 = null;   // 当前运行版本，每次进「设置 → 关于」时刷新（{版本,提交,日期}）
 let 更新检查结果 = null;   // /api/update/check 的结果缓存，null=还没检查过
 let 更新检查中 = false;
 let 更新执行中 = false;    // apply/rollback 进行中：禁用按钮、展示滚动日志
 let 更新日志缓存 = [];     // apply/rollback 返回的 日志[]
-let 版本日志展开 = false;   // 「更新日志」折叠展开
-let 版本日志缓存 = null;    // /api/update/changelog 返回的各版本日志
+let 版本日志缓存 = null;    // /api/update/changelog 返回的各版本日志（拉过一次就缓存）
 
 document.getElementById('导航').addEventListener('click', e => {
   const btn = e.target.closest('button');
@@ -394,7 +460,22 @@ async function 渲染房间(容器) {
         </tr>`).join('')}
         ${在租列表.length ? '' : '<tr><td colspan="8" class="空">暂无在租房间，点右上角「添加租户」录入</td></tr>'}
       </table></div>
-    </div>`;
+    </div>
+    ${硬账目卡片(在租列表)}`;
+}
+// 硬账目：当前在租房间「月租金 + 管理费」的应收总额（满租满月的理论值，不含水电/损耗，也不看实际收没收）
+function 硬账目卡片(在租列表) {
+  const 合计 = (键) => 在租列表.reduce((和, r) => 和 + (Number(r[键]) || 0), 0);
+  const 房租 = 合计('月租金'), 管理费 = 合计('管理费');
+  return `<div class="卡片">
+    <h2>🧱 硬账目（${在租列表.length} 间在租）</h2>
+    <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">当前在租房间的<b>房租 + 管理费</b>应收总额，即满月满租的固定月收入。不含水电、损耗、补缴，也与实际收没收无关。</p>
+    <div class="汇总网格">
+      <div class="汇总项"><div class="标签">房租合计</div><div class="数值">¥${数字(房租)}</div></div>
+      <div class="汇总项"><div class="标签">管理费合计</div><div class="数值">¥${数字(管理费)}</div></div>
+      <div class="汇总项 收入"><div class="标签">硬账目合计</div><div class="数值">¥${数字(房租 + 管理费)}</div></div>
+    </div>
+  </div>`;
 }
 function 交租日显示(房) { if (!房.入住日) return '—'; const d = Number(String(房.入住日).slice(8, 10)); return d ? d + '号' : '—'; }
 
@@ -402,11 +483,15 @@ function 交租日显示(房) { if (!房.入住日) return '—'; const d = Numb
 let 房间模式 = '正常';
 // 房间表单（新增/编辑共用；r 为空则空表单，有值则预填；预缴模式多身份证/预缴金/管理费预缴金）
 function 房间表单HTML(r = {}) {
-  const 字 = (k, v, 标) => `<div class="字段"><label>${标 || k}</label><input id="${v}" value="${转义(r[k] ?? '')}"></div>`;
+  const 字 = (k, v, 标, 额外 = '') => `<div class="字段"><label>${标 || k}</label><input id="${v}" value="${转义(r[k] ?? '')}" ${额外}></div>`;
+  // 租客姓名填完失焦，自动从客人档案带出身份证和电话（重名会弹选择框）
+  const 姓名框 = 字('租客姓名', 'f租客', null, `onchange="带出客人('f租客','f身份证','f电话')"`);
   const 数 = (k, v, 标) => `<div class="字段"><label>${标 || k}</label><input id="${v}" type="number" value="${r[k] ?? ''}"></div>`;
+  // 水电单价留空 = 跟随「设置 → 数据 → 水电变量」，标签里带上当前变量值，填了才覆盖
+  const 水标 = `水费单价（空=默认 ${全局.settings.水价}）`, 电标 = `电费单价（空=默认 ${全局.settings.电价}）`;
   if (房间模式 === '预缴') {
     return `
-    <div class="行三">${字('租客姓名', 'f租客')}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
+    <div class="行三">${姓名框}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
     <div class="行">
       <div class="字段"><label>入住日（几号入住=几号交租）</label><input id="f入住" type="date" value="${r.入住日||''}"></div>
       <div class="字段"><label>到期日</label><input id="f到期" type="date" value="${r.到期日||''}"></div>
@@ -414,18 +499,18 @@ function 房间表单HTML(r = {}) {
     <div class="行">${数('月租金', 'f月租', '月租金 *')}${数('预缴金', 'f预缴金', '预缴金（房租）')}</div>
     <div class="行">${数('管理费', 'f管理费', '管理费 *')}${数('管理费预缴金', 'f管理费预缴金', '预缴金（管理费）')}</div>
     <div class="行">${数('押金', 'f押金')}${数('房卡押金', 'f房卡押金')}</div>
-    <div class="行">${数('水费单价', 'f水单价', '水费单价（空=默认）')}${数('电费单价', 'f电单价', '电费单价（空=默认）')}</div>
+    <div class="行">${数('水费单价', 'f水单价', 水标)}${数('电费单价', 'f电单价', 电标)}</div>
     <div class="行">${数('水表底度', 'f水底')}${数('电表底度', 'f电底')}</div>
     ${字('备注', 'f备注')}`;
   }
   return `
-    <div class="行三">${字('租客姓名', 'f租客')}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
+    <div class="行三">${姓名框}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
     <div class="行">
       <div class="字段"><label>入住日（几号入住=几号交租）</label><input id="f入住" type="date" value="${r.入住日||''}"></div>
       <div class="字段"><label>到期日</label><input id="f到期" type="date" value="${r.到期日||''}"></div>
     </div>
     <div class="行四">${数('月租金', 'f月租', '月租金 *')}${数('押金', 'f押金')}${数('房卡押金', 'f房卡押金')}${数('管理费', 'f管理费', '管理费 *')}</div>
-    <div class="行">${数('水费单价', 'f水单价', '水费单价（空=默认）')}${数('电费单价', 'f电单价', '电费单价（空=默认）')}</div>
+    <div class="行">${数('水费单价', 'f水单价', 水标)}${数('电费单价', 'f电单价', 电标)}</div>
     <div class="行">${数('水表底度', 'f水底')}${数('电表底度', 'f电底')}</div>
     ${字('备注', 'f备注')}`;
 }
@@ -436,6 +521,8 @@ function 收集房间数据() {
     水费单价: document.getElementById('f水单价').value, 电费单价: document.getElementById('f电单价').value,
     水表底度: document.getElementById('f水底').value, 电表底度: document.getElementById('f电底').value,
     租客姓名: document.getElementById('f租客').value, 电话: document.getElementById('f电话').value,
+    // 从客人档案带出来的话记着来源，改了字段就覆盖那条（后端不会把这个字段存进房间）
+    档案id: document.getElementById('f租客').dataset.档案id ? Number(document.getElementById('f租客').dataset.档案id) : null,
     身份证: document.getElementById('f身份证')?.value || '',
     预缴金: document.getElementById('f预缴金')?.value || '',
     管理费预缴金: document.getElementById('f管理费预缴金')?.value || '',
@@ -730,7 +817,7 @@ async function 渲染租客账单(容器) {
         </div>
         <div class="明细行">
           <span class="明细标签"><span class="标签名 备注名">备注信息</span><span class="冒号">：</span></span>
-          <span class="明细底度"><input id="损${转义(b.房号)}说明" class="抄表输入" value="${转义(b.损耗说明||'')}" placeholder="备注说明，如：房租欠、墙面损坏…" onchange="改损耗说明('${转义(b.房号)}','${b.月份}',this.value)"></span>
+          <span class="明细底度"><input id="损${转义(b.房号)}说明" class="抄表输入" value="${转义(b.损耗说明||'')}" placeholder="备注说明" onchange="改损耗说明('${转义(b.房号)}','${b.月份}',this.value)"></span>
           <span class="明细金额"><span class="金额词">金额：</span><input id="损${转义(b.房号)}金额" type="number" class="抄表输入 钱数" value="${b.房间损耗 || ''}" placeholder="0" onchange="改损耗('${转义(b.房号)}','${b.月份}',this.value)"></span>
         </div>
       </div>
@@ -764,6 +851,7 @@ window.改损耗 = async function(房号, 月份, 值) {
 // ============ 账单（总账单 + 月度账单） ============
 let 账单tab = '月度账单'; let 汇总类型 = '月租'; let 汇总月份 = null; let 账单状态筛选 = '全部';
 let 日租视图 = '表格'; let 日租搜索日 = '';
+let 日租姓名筛选 = ''; let 日租房号筛选 = '';   // 只作用在日租的「表格模式」，图表模式按天汇总金额、不看客人
 async function 渲染账单(容器) {
   if (!汇总月份) 汇总月份 = 全局.settings.当前月份;
   容器.innerHTML = `
@@ -857,7 +945,7 @@ window.渲染全部账单表 = function() {
   }
   const 表区 = document.getElementById('全部账单表区');
   if (表区) {
-    表区.innerHTML = `<div class="表格容器"><table>
+    表区.innerHTML = `<div class="表格容器"><table class="斑马">
       <tr><th>月份</th><th class="数字">月租总收</th><th class="数字">日租总收</th><th class="数字">支出(减工资)</th><th class="数字">工资</th><th class="数字">利润</th><th class="数字">房租支出</th><th class="数字">净利润</th></tr>
       ${列表.map(r => `<tr><td><b>${r.月份}</b></td><td class="数字">¥${数字(r.月租总收)}</td><td class="数字">¥${数字(r.日租总收)}</td><td class="数字">¥${数字(r.支出)}</td><td class="数字">¥${数字(r.工资)}</td><td class="数字">¥${数字(r.利润)}</td><td class="数字">¥${数字(r.房租支出)}</td><td class="数字">¥${数字(r.净利润)}</td></tr>`).join('')}
       ${列表.length?'':'<tr><td colspan="8" class="空">无匹配数据</td></tr>'}
@@ -876,6 +964,12 @@ window.渲染全部账单表 = function() {
       </div>`;
   }
 };
+// 日租按天搜索：选了哪天就把月份一起跳过去，免得选的日子不在当前月、结果一条都搜不出来
+window.选日租日 = function(值) {
+  日租搜索日 = 值 || '';
+  if (日租搜索日) 汇总月份 = 日租搜索日.slice(0, 7);
+  渲染();
+};
 window.删除账单 = async function(房号, 月份) {
   if (!confirm(`确定删除 ${房号} ${月份} 的账单记录？`)) return;
   await api(`/api/bills?房号=${房号}&月份=${月份}`, { method: 'DELETE' });
@@ -890,17 +984,26 @@ async function 渲染月度账单明细(el) {
         <option ${汇总类型==='日租'?'selected':''}>日租</option>
         <option ${汇总类型==='支出'?'selected':''}>支出</option>
       </select>
-      <input type="month" value="${月}" onchange="汇总月份=this.value;渲染()">
-      <button class="btn 次" onclick="汇总月份=加月('${月}',-1);渲染()">上月</button>
-      <button class="btn 次" onclick="汇总月份=全局.settings.当前月份;渲染()">本月</button>
-      <button class="btn 次" onclick="汇总月份=加月('${月}',1);渲染()">次月</button>
-      <select onchange="账单状态筛选=this.value;渲染()">
+      ${汇总类型 === '日租'
+        // 日租：月份框换成年月日框，留空 = 看整月（标题里写着是哪个月），选了日子就只看那一天
+        ? `<input type="date" value="${日租搜索日}" onchange="选日租日(this.value)" title="按天搜索，留空看整月">
+           ${日租搜索日 ? `<button class="btn 次" onclick="日租搜索日='';渲染()">清除</button>` : ''}
+           ${日租视图 === '表格' ? `
+             <input value="${转义(日租姓名筛选)}" placeholder="客人姓名" style="width:110px" oninput="日租姓名筛选=this.value" onchange="渲染()" onkeydown="if(event.key==='Enter'&&!event.isComposing)渲染()">
+             <input value="${转义(日租房号筛选)}" placeholder="房号" style="width:90px" oninput="日租房号筛选=this.value" onchange="渲染()" onkeydown="if(event.key==='Enter'&&!event.isComposing)渲染()">
+             ${(日租姓名筛选 || 日租房号筛选) ? `<button class="btn 次" onclick="日租姓名筛选='';日租房号筛选='';渲染()">清空筛选</button>` : ''}` : ''}`
+        : `<input type="month" value="${月}" onchange="汇总月份=this.value;渲染()">`}
+      ${汇总类型 === '月租' ? `<select onchange="账单状态筛选=this.value;渲染()">
         <option value="全部" ${账单状态筛选==='全部'?'selected':''}>全部状态</option>
         <option value="已核收" ${账单状态筛选==='已核收'?'selected':''}>已核收</option>
         <option value="未交" ${账单状态筛选==='未交'?'selected':''}>未交</option>
         <option value="欠款" ${账单状态筛选==='欠款'?'selected':''}>欠款</option>
         <option value="未出租" ${账单状态筛选==='未出租'?'selected':''}>未出租</option>
-      </select>
+      </select>` : ''}
+      <button class="btn 次" onclick="汇总月份=加月('${月}',-1);渲染()">上月</button>
+      <button class="btn 次" onclick="汇总月份=全局.settings.当前月份;渲染()">本月</button>
+      <button class="btn 次" onclick="汇总月份=加月('${月}',1);渲染()">次月</button>
+      ${汇总类型 === '日租' ? `<button class="btn 次" onclick="日租视图='${日租视图==='表格'?'图表':'表格'}';渲染()">${日租视图==='表格'?'图表模式':'表格模式'}</button>` : ''}
     </div></div>`;
   if (汇总类型 === '月租') {
     const 账单 = await api(`/api/bills?month=${月}`);
@@ -908,14 +1011,16 @@ async function 渲染月度账单明细(el) {
   } else if (汇总类型 === '日租') {
     let daily = await api(`/api/daily?month=${月}`);
     if (日租搜索日) daily = daily.filter(d => d.日期 === 日租搜索日);
-    const 合计 = daily.reduce((s, d) => s + (Number(d.金额) || 0), 0);
-    el.innerHTML += `<div class="卡片"><h2>日租（${月}${日租搜索日 ? ' · ' + 中文日期(日租搜索日) : ''}）　合计 ¥${数字(合计)}</h2>
-      <div class="工具栏">
-        <input type="date" value="${日租搜索日}" onchange="日租搜索日=this.value;渲染()" title="按天搜索">
-        ${日租搜索日 ? `<button class="btn 次" onclick="日租搜索日='';渲染()">清除</button>` : ''}
-        <button class="btn 次" onclick="日租视图='${日租视图==='表格'?'图表':'表格'}';渲染()">${日租视图==='表格'?'图表模式':'表格模式'}</button>
-      </div>
-      ${日租视图 === '表格' ? 日租表格(daily, 月, 日租搜索日) : 日租图表(daily, 月, 日租搜索日)}
+    const 姓 = 日租姓名筛选.trim(), 房 = 日租房号筛选.trim();
+    const 有筛选 = 日租视图 === '表格' && (姓 || 房);
+    // 姓名/房号只筛表格模式；图表模式按天汇总金额，按用户要求不动
+    const 表格数据 = 有筛选
+      ? daily.filter(d => (!姓 || String(d.客人 || '').includes(姓)) && (!房 || String(d.房号 || '').includes(房)))
+      : daily;
+    const 合计 = (日租视图 === '表格' ? 表格数据 : daily).reduce((s, d) => s + (Number(d.金额) || 0), 0);
+    const 筛选说明 = 有筛选 ? ` · 筛选${姓 ? ' 客人「' + 转义(姓) + '」' : ''}${房 ? ' 房号「' + 转义(房) + '」' : ''}（${表格数据.length} 条）` : '';
+    el.innerHTML += `<div class="卡片"><h2>日租（${日租搜索日 ? 中文日期(日租搜索日) : 中文年月(月)}${筛选说明}）　合计 ¥${数字(合计)}</h2>
+      ${日租视图 === '表格' ? 日租表格(表格数据, 月, 日租搜索日, !有筛选) : 日租图表(daily, 月, 日租搜索日)}
     </div>`;
   } else {
     const 支出 = await api(`/api/transactions?month=${月}`);
@@ -977,7 +1082,14 @@ function 按日期分组(daily) {
   return 按日;
 }
 // 日租表格模式：完整字段列表。空白天只显示日期，其余列留空
-function 日租表格(daily, 月, 单日) {
+// 补空白=false 用于「按姓名/房号筛选」时：只列命中的记录，不再把整月没客人的天也铺出来
+function 日租表格(daily, 月, 单日, 补空白 = true) {
+  if (!补空白) {
+    const 命中 = [...daily].sort((a, b) => (a.日期 || '').localeCompare(b.日期 || '') || a.id - b.id);
+    return `<div class="表格容器"><table><tr><th>日期</th><th>房号</th><th>客人</th><th>天数</th><th class="数字">金额</th></tr>
+      ${命中.map(d => `<tr><td>${转义(d.日期)}</td><td>${转义(d.房号||'—')}</td><td>${转义(d.客人||'—')}</td><td>${d.入住天数||1}晚</td><td class="数字">¥${数字(d.金额)}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="空">没有匹配的记录</td></tr>'}</table></div>`;
+  }
   const 按日 = 按日期分组(daily);
   const 日期们 = 月内日期们(月, 单日);
   const 行 = 日期们.map(日期 => {
@@ -1002,39 +1114,302 @@ function 日租图表(daily, 月, 单日) {
     ${行 || '<tr><td colspan="3" class="空">无日租</td></tr>'}</table></div>`;
 }
 
-// ============ 日租 ============
+// ============ 日租房态图（EBK 式：空闲 → 在住 → 脏房 → 空闲） ============
+// 钱只在「办入住」那一步记进 daily（账单页/总账单的口径没变），退房和清洁只改房间状态。
+let 房态数据 = null;   // 最近一次 /api/roomstatus 的结果，弹窗里要用
 async function 渲染日租(容器) {
-  const 月份 = 全局.settings.当前月份;
-  const [daily, 房源] = await Promise.all([api(`/api/daily?month=${月份}`), api('/api/houses')]);
-  const 日租房 = 房源.filter(h => h.房型 === '日租');
-  daily.sort((a, b) => (b.日期 || '').localeCompare(a.日期 || '') || (b.id || 0) - (a.id || 0)); // 从新到旧
+  const d = await api('/api/roomstatus');
+  房态数据 = d;
+  const 概 = d.概览;
   容器.innerHTML = `
     <div class="卡片">
-      <h2>日租</h2>
-      <div class="工具栏">
-        <input id="日日期" type="date" value="${今天()}">
-        <input id="日房号" list="日租房列表" placeholder="房号（可手动输）" style="width:150px">
-        <datalist id="日租房列表">${日租房.map(h => `<option value="${转义(h.房号)}">`).join('')}</datalist>
-        <input id="日客人" placeholder="客人" style="width:100px">
-        <input id="日天数" type="number" value="1" min="1" style="width:60px" title="入住天数">
-        <input id="日金额" type="number" placeholder="金额" style="width:80px">
-        <button class="btn" onclick="新增日租()">记录</button>
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--次文字);cursor:pointer;white-space:nowrap"><input type="checkbox" ${启用删除?'checked':''} onchange="启用删除=this.checked;渲染()" style="cursor:pointer">删除模式</label>
+      <div class="工具栏"><h2 style="margin:0;flex:1">🏨 日租房态（${d.房间.length} 间）</h2>
+        ${概.脏房 ? `<button class="btn 黄" onclick="一键全清()">🧹 全部脏房标记已清洁（${概.脏房}）</button>` : ''}
       </div>
+      <div class="汇总网格">
+        <div class="汇总项 收入"><div class="标签">在住</div><div class="数值">${概.在住} 间</div></div>
+        <div class="汇总项"><div class="标签">脏房待清洁</div><div class="数值">${概.脏房} 间</div></div>
+        <div class="汇总项"><div class="标签">可用</div><div class="数值">${概.可用} 间</div></div>
+        <div class="汇总项 收入"><div class="标签">今日日租收入</div><div class="数值">¥${数字(概.今日收入)}</div></div>
+      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-top:12px">点房间卡片办理入住 / 退房 / 清洁。<b style="color:var(--绿)">绿色 = 在住</b>，<b style="color:#a16207">黄色 = 脏房待清洁</b>，无色 = 可用。房费在办入住时就记进日租账单。</p>
+      ${d.房间.length ? `<div class="房态网格">${d.房间.map(房态卡).join('')}</div>`
+        : '<p class="空">还没有日租房间。去「设置 → 参数 → 房源信息」把房间的房型切成「日租」。</p>'}
+    </div>
+    <div class="卡片">
+      <div class="工具栏"><h2 style="margin:0;flex:1">📋 今日入住记录（${中文日期(d.今日)}）　合计 ¥${数字(概.今日收入)}</h2>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--次文字);cursor:pointer;white-space:nowrap"><input type="checkbox" ${启用删除?'checked':''} onchange="启用删除=this.checked;渲染()" style="cursor:pointer">🗑 删除模式</label>
+      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">按<b>营业日</b>统计：早上 6 点换日，${短日期(d.今日)} 6:00 到次日 5:59 记的都算这一天。房费 0 元的入住只占房、不入账，不会出现在这里。</p>
       <div class="表格容器"><table>
-        <tr><th>日期</th><th>房号</th><th>客人</th><th>天数</th><th class="数字">金额</th><th></th></tr>
-        ${daily.map(d => `<tr><td>${转义(d.日期)}</td><td>${转义(d.房号||'—')}</td><td>${转义(d.客人||'—')}</td><td>${d.入住天数||1}晚</td><td class="数字">¥${数字(d.金额)}</td><td>${启用删除 ? `<button class="btn 行内 危险" onclick="删除日租(${d.id})">删</button>` : ''}</td></tr>`).join('')}
-        ${daily.length?'':'<tr><td colspan="6" class="空">本月无日租记录</td></tr>'}
+        <tr><th>房号</th><th>客人</th><th>晚数</th><th class="数字">金额</th>${启用删除 ? '<th></th>' : ''}</tr>
+        ${d.今日入住.map(x => `<tr>
+          <td><b>${转义(x.房号 || '—')}</b></td>
+          <td>${转义(x.客人 || '—')}</td>
+          <td>${x.入住天数} 晚</td>
+          <td class="数字">¥${数字(x.金额)}</td>
+          ${启用删除 ? `<td><button class="btn 行内 危险" onclick="删除入住记录(${x.id},'${转义(x.房号 || '')}',${x.金额})">删</button></td>` : ''}
+        </tr>`).join('')}
+        ${d.今日入住.length ? '' : `<tr><td colspan="${启用删除?5:4}" class="空">今天还没有入住记录</td></tr>`}
       </table></div>
     </div>`;
 }
-window.新增日租 = async function() {
-  const 日期 = document.getElementById('日日期').value, 金额 = document.getElementById('日金额').value;
-  if (!日期 || 金额 === '') { 提示('请填日期和金额'); return; }
-  await api('/api/daily', { method: 'POST', body: { 日期, 房号: document.getElementById('日房号').value, 客人: document.getElementById('日客人').value, 入住天数: document.getElementById('日天数').value, 金额 } });
-  提示('已记录'); 渲染();
+// 一间房一张卡：颜色=状态，在住的把客人信息直接印在卡上
+function 房态卡(r) {
+  const 状态类 = r.状态 === '在住' ? '在住' : (r.状态 === '脏房' ? '脏房' : '空闲');
+  let 正文 = '';
+  if (r.状态 === '在住') {
+    const 钟点 = r.房型 === '钟点';
+    // 钟点房看倒计时，全天房看到期日
+    const 期 = 钟点
+      ? (r.剩余分钟 != null && r.剩余分钟 <= 0
+          ? `<div class="房态行 警">⏰ 已到点</div>`
+          : `<div class="房态行${r.剩余分钟 != null && r.剩余分钟 <= 30 ? ' 警' : ''}">⏰ ${时刻到点(r.预计退房)} 到点${r.剩余分钟 != null ? `（剩 ${余时文(r.剩余分钟)}）` : ''}</div>`)
+      : (r.已超期 ? `<div class="房态行 警">⚠ 已超期（${短日期(r.到期日)} 到期）</div>`
+        : r.今日到期 ? `<div class="房态行 警">今天到期</div>`
+        : `<div class="房态行">${短日期(r.到期日)} 到期</div>`);
+    const 人数 = (r.客人们 || []).length;
+    正文 = `<div class="房态客人">${转义(r.客人 || '（未留姓名）')}${人数 > 1 ? `<span class="房态人数">${人数}人</span>` : ''}</div>
+      <div class="房态行">${短日期(r.入住日)} 入住 · ${钟点 ? `钟点 ${r.时长小时} 小时` : r.天数 + ' 天'}</div>
+      ${期}
+      <div class="房态钱">¥${数字(r.金额)}</div>`;
+  } else if (r.状态 === '脏房') {
+    正文 = `<div class="房态客人">待清洁</div>
+      <div class="房态行">${r.客人 ? 转义(r.客人) + ' 已退房' : '客人已退房'}</div>
+      <div class="房态行">${转义(时刻(r.退房时间) || '—')}</div>`;
+  } else {
+    正文 = `<div class="房态客人 淡">可用</div>
+      <div class="房态行">点击办理入住</div>
+      ${r.清洁时间 ? `<div class="房态行 淡">${转义(时刻(r.清洁时间))} 已清洁</div>` : ''}`;
+  }
+  return `<button class="房态卡 ${状态类}" onclick="点房间('${转义(r.房号)}')">
+    <div class="房态卡头"><b>${转义(r.房号)}</b><span class="房态签 ${状态类}">${r.状态}</span></div>
+    <div class="房态卡身">${正文}</div>
+  </button>`;
+}
+// ISO 时间戳 → "8月26日 14:30"（房态记的是 new Date().toISOString()）
+function 时刻(iso) {
+  if (!iso) return '';
+  const t = new Date(iso);
+  if (isNaN(t)) return '';
+  return `${t.getMonth() + 1}月${t.getDate()}日 ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+}
+function 找房态(房号) { return (房态数据 && 房态数据.房间.find(r => r.房号 === 房号)) || null; }
+// 钟点房到点时刻，只要时分："18:30"
+function 时刻到点(iso) {
+  if (!iso) return '';
+  const t = new Date(iso);
+  return isNaN(t) ? '' : `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+}
+// 剩余分钟 → "1 小时 20 分" / "45 分"
+function 余时文(分钟) {
+  const m = Math.max(0, Number(分钟) || 0);
+  return m >= 60 ? `${Math.floor(m / 60)} 小时${m % 60 ? ' ' + (m % 60) + ' 分' : ''}` : `${m} 分`;
+}
+
+// 点房间：按当前状态给不同的弹窗
+window.点房间 = function(房号) {
+  const r = 找房态(房号);
+  if (!r) { 提示('房间信息已过期，正在刷新'); 渲染(); return; }
+  if (r.状态 === '在住') 打开在住详情(r);
+  else if (r.状态 === '脏房') 打开脏房详情(r);
+  else 打开入住模态(r);
 };
-window.删除日租 = async function(id) { await api(`/api/daily/${id}`, { method: 'DELETE' }); 提示('已删除'); 渲染(); };
+const 钟点房默认价 = 60;   // 选钟点房时自动带出的房费
+function 打开入住模态(r) {
+  打开模态(`<h2>办理入住 —— ${转义(r.房号)}</h2>
+    <div class="房型区">
+      <div class="房型选">
+        <button class="房型卡 选中" data-房型="全天" onclick="选住房型('全天')">
+          <span class="房型图">🛏️</span><span class="房型名">全日房</span>
+        </button>
+        <button class="房型卡" data-房型="钟点" onclick="选住房型('钟点')">
+          <span class="房型图">⏰</span><span class="房型名">钟点房</span>
+        </button>
+      </div>
+      <div class="字段" id="住时长区" style="display:none"><label>钟点时长（小时）</label><input id="住时长" type="number" min="0.5" step="0.5" value="3" style="width:130px"></div>
+    </div>
+    <div id="客人区">${客人行HTML(true)}</div>
+    <div class="行三" style="margin-top:10px">
+      <div class="字段"><label>入住日期</label><input id="住日期" type="date" value="${营业日()}"></div>
+      <div class="字段"><label>入住天数 *</label><input id="住天数" type="number" min="1" value="1"></div>
+      <div class="字段"><label>金额 *</label><input id="住金额" type="number" min="0" placeholder="总房费"></div>
+    </div>
+    <div class="字段" style="margin-top:10px"><label>备注信息</label><input id="住备注" placeholder="选填"></div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn 成功" onclick="办入住('${转义(r.房号)}')">确认入住</button>
+      <button class="btn 次" onclick="请求关闭模态()">取消</button>
+    </div>`);
+}
+// 一位客人一行：姓名 / 电话 / 身份证。第一行末尾是「+」加人，后续行是「−」删掉这行
+function 客人行HTML(首行) {
+  return `<div class="客人行">
+    <div class="字段"><label>姓名</label><input class="客名" placeholder="姓名" onchange="带出客人行(this)"></div>
+    <div class="字段"><label>电话</label><input class="客话" placeholder="电话"></div>
+    <div class="字段"><label>身份证</label><input class="客证" placeholder="身份证"></div>
+    ${首行
+      ? `<button class="btn 客人加减" onclick="加客人行()" title="再登记一位客人">+</button>`
+      : `<button class="btn 次 客人加减" onclick="this.closest('.客人行').remove()" title="删掉这一位">−</button>`}
+  </div>`;
+}
+window.加客人行 = function() {
+  const 区 = document.getElementById('客人区');
+  if (!区) return;
+  区.insertAdjacentHTML('beforeend', 客人行HTML(false));
+  const 行们 = 区.querySelectorAll('.客人行');
+  行们[行们.length - 1].querySelector('.客名').focus();
+};
+window.选住房型 = function(房型) {
+  const 钟点 = 房型 === '钟点';
+  document.querySelectorAll('.房型卡').forEach(b => b.classList.toggle('选中', b.dataset.房型 === 房型));
+  document.getElementById('住时长区').style.display = 钟点 ? '' : 'none';
+  const 天数框 = document.getElementById('住天数');
+  天数框.disabled = 钟点;                       // 钟点房按小时算，天数没意义
+  天数框.value = 钟点 ? 1 : (天数框.value || 1);
+  // 钟点房带出默认价。只在金额空着时填，不覆盖手输的数；切回全日房时再把自动填的那笔清掉
+  const 金额框 = document.getElementById('住金额');
+  if (钟点) {
+    if (!金额框.value.trim()) { 金额框.value = 钟点房默认价; 金额框.dataset.自动 = '1'; }
+  } else if (金额框.dataset.自动 === '1') {
+    金额框.value = ''; delete 金额框.dataset.自动;
+  }
+};
+// 行内版的「按姓名带出档案」：从同一行里找电话和身份证框。
+// 备注是整单一个框，只让**第一位**客人带出来，免得后面几行互相覆盖
+window.带出客人行 = function(名框) {
+  const 行 = 名框.closest('.客人行');
+  if (!行) return;
+  const 区 = document.getElementById('客人区');
+  const 首行 = 区 && 区.querySelector('.客人行') === 行;
+  带出客人到(名框, 行.querySelector('.客证'), 行.querySelector('.客话'), 首行 ? document.getElementById('住备注') : null);
+};
+function 收集客人们() {
+  return [...document.querySelectorAll('#客人区 .客人行')].map(行 => {
+    const 名框 = 行.querySelector('.客名');
+    return {
+      姓名: 名框.value.trim(),
+      电话: 行.querySelector('.客话').value.trim(),
+      身份证: 行.querySelector('.客证').value.trim(),
+      // 从档案带出来的才有：后端按它覆盖原条目，而不是新增一条
+      档案id: 名框.dataset.档案id ? Number(名框.dataset.档案id) : null
+    };
+  }).filter(x => x.姓名 || x.电话 || x.身份证);
+}
+function 打开在住详情(r) {
+  const 行 = (标, 值) => `<div class="详情项"><span>${标}</span><b>${转义(值 == null || 值 === '' ? '—' : String(值))}</b></div>`;
+  const 钟点 = r.房型 === '钟点';
+  const 客人们 = (r.客人们 && r.客人们.length) ? r.客人们 : [{ 姓名: r.客人, 电话: r.电话, 身份证: r.身份证 }];
+  打开模态(`<h2>${转义(r.房号)} —— 在住中${钟点 ? '（钟点房）' : ''}</h2>
+    <div class="表格容器"><table>
+      <tr><th>客人</th><th>电话</th><th>身份证</th></tr>
+      ${客人们.map(g => `<tr><td>${转义(g.姓名 || '—')}</td><td>${转义(g.电话 || '—')}</td><td>${转义(g.身份证 || '—')}</td></tr>`).join('')}
+    </table></div>
+    <div class="详情格" style="margin-top:12px">
+      ${行('入住日', r.入住日)}
+      ${钟点 ? 行('时长', r.时长小时 + ' 小时') : 行('入住天数', r.天数 + ' 天')}
+      ${钟点 ? 行('到点时刻', 时刻(r.预计退房)) : 行('到期日', r.到期日)}
+      ${行('金额', '¥' + 数字(r.金额) + (r.日租id == null ? '（0 元未入账）' : ''))}
+      ${行('办理时间', 时刻(r.入住时间))}${行('备注', r.备注)}
+    </div>
+    ${r.已超期 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⚠ 已超过到期日，续住请在下面加天数。</p>' : ''}
+    ${钟点 && r.剩余分钟 != null && r.剩余分钟 <= 0 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⏰ 已到点，刷新后会自动转成脏房；要延时就在下面加小时数。</p>' : ''}
+    <h3 style="margin-top:16px">${钟点 ? '延时 / 改价' : '续住 / 改价'}</h3>
+    <div class="表单 两列">
+      ${钟点
+        ? `<div class="字段"><label>时长（小时）</label><input id="续时长" type="number" min="0.5" step="0.5" value="${r.时长小时 || 3}"></div>`
+        : `<div class="字段"><label>入住天数</label><input id="续天数" type="number" min="1" value="${r.天数 || 1}"></div>`}
+      <div class="字段"><label>金额</label><input id="续金额" type="number" min="0" value="${r.金额}"></div>
+    </div>
+    <p style="color:var(--次文字);font-size:13px;margin-top:8px">改完会同步更新这间房对应的那条日租账单。改成 <b>0 元会撤掉账单</b>，从 0 改成正数会补记一条。</p>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="保存续住('${转义(r.房号)}')">保存续住 / 改价</button>
+      <button class="btn 黄" onclick="房间退房('${转义(r.房号)}')">退房（转脏房）</button>
+      <button class="btn 危险" onclick="撤销入住('${转义(r.房号)}')">撤销入住</button>
+      <button class="btn 次" onclick="请求关闭模态()">关闭</button>
+    </div>`);
+}
+function 打开脏房详情(r) {
+  打开模态(`<h2>${转义(r.房号)} —— 脏房待清洁</h2>
+    <p style="color:var(--次文字);font-size:14px">${r.客人 ? '上一位客人：<b style="color:var(--文字)">' + 转义(r.客人) + '</b>　' : ''}退房时间：<b style="color:var(--文字)">${转义(时刻(r.退房时间) || '—')}</b></p>
+    <p style="color:var(--次文字);font-size:13px;margin-top:10px">确认清洁后房间恢复「可用」，并留一条清洁记录。</p>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn 成功" onclick="确认清洁('${转义(r.房号)}')">✅ 确认已清洁</button>
+      <button class="btn 次" onclick="请求关闭模态()">关闭</button>
+    </div>`);
+}
+window.办入住 = async function(房号) {
+  const 房型 = document.querySelector('.房型卡.选中')?.dataset.房型 || '全天';
+  const 钟点 = 房型 === '钟点';
+  const 时长小时 = 钟点 ? Number(document.getElementById('住时长').value) || 0 : 0;
+  const 天数 = 钟点 ? 1 : (Number(document.getElementById('住天数').value) || 0);
+  const 金额值 = document.getElementById('住金额').value;
+  if (钟点 && 时长小时 < 0.5) { 提示('钟点时长至少 0.5 小时'); return; }
+  if (!钟点 && 天数 < 1) { 提示('入住天数要填 1 以上'); return; }
+  if (金额值 === '') { 提示('请填金额'); return; }
+  const 金额 = Number(金额值);
+  if (!(金额 >= 0)) { 提示('金额不对'); return; }
+  const 客人们 = 收集客人们();
+  const 名字 = 客人们.map(x => x.姓名).filter(Boolean).join('、');
+  const 时长文 = 钟点 ? `钟点房 ${时长小时} 小时` : `${天数} 天`;
+  if (!await 询问确认('确认办理入住？',
+    `${转义(房号)}　${转义(名字 || '未留姓名')}${客人们.length > 1 ? `（${客人们.length} 人）` : ''}<br>${时长文}　¥${数字(金额)}${金额 > 0 ? '' : '（0 元只占房、不入账）'}`)) return;
+  const r = await api('/api/roomstatus/checkin', { method: 'POST', body: {
+    房号, 客人们, 入住日: document.getElementById('住日期').value,
+    天数, 金额, 房型, 时长小时,
+    备注: document.getElementById('住备注').value.trim()
+  } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(`${房号} 已入住`); 关闭模态(); 渲染();
+};
+window.保存续住 = async function(房号) {
+  const 时长框 = document.getElementById('续时长');
+  const 钟点 = !!时长框;
+  const 时长小时 = 钟点 ? Number(时长框.value) || 0 : 0;
+  const 天数 = 钟点 ? 1 : (Number(document.getElementById('续天数').value) || 0);
+  const 金额 = Number(document.getElementById('续金额').value);
+  if (钟点 && 时长小时 < 0.5) { 提示('钟点时长至少 0.5 小时'); return; }
+  if (!钟点 && 天数 < 1) { 提示('入住天数要填 1 以上'); return; }
+  if (!(金额 >= 0)) { 提示('金额不对'); return; }
+  if (!await 询问确认('确认修改？',
+    `${转义(房号)}　改为 ${钟点 ? 时长小时 + ' 小时（从入住时刻起算）' : 天数 + ' 天'}　¥${数字(金额)}<br>对应的日租账单会一起改。`)) return;
+  const r = await api('/api/roomstatus/extend', { method: 'POST', body: { 房号, 天数, 金额, 时长小时 } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(r.提示 || '已更新'); 关闭模态(); 渲染();
+};
+window.房间退房 = async function(房号) {
+  if (!await 询问确认('确认退房？', `${转义(房号)} 转为「脏房」等待清洁。<br>房费已在入住时记账，退房不影响账单。`)) return;
+  const r = await api('/api/roomstatus/checkout', { method: 'POST', body: { 房号 } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(`${房号} 已退房，待清洁`); 关闭模态(); 渲染();
+};
+window.撤销入住 = async function(房号) {
+  if (!await 询问确认('撤销这次入住？', `录错了才用。<br><b>会删掉入住时记的那条日租账单</b>，${转义(房号)} 退回「可用」。`)) return;
+  const r = await api('/api/roomstatus/undo-checkin', { method: 'POST', body: { 房号 } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(r.删除账单 ? '已撤销，账单记录同步删除' : '已撤销（未找到对应账单）'); 关闭模态(); 渲染();
+};
+window.确认清洁 = async function(房号) {
+  if (!await 询问确认('确认已清洁？', `${转义(房号)} 恢复「可用」，可以接新客人。`)) return;
+  const r = await api('/api/roomstatus/clean', { method: 'POST', body: { 房号 } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(`${房号} 已清洁`); 关闭模态(); 渲染();
+};
+// 删掉一条今日入住记录：账单里那笔一起删，房态若正指着它就退回「可用」
+window.删除入住记录 = async function(id, 房号, 金额) {
+  if (!await 询问确认('删除这条入住记录？', `${转义(房号 || '未填房号')}　¥${数字(金额)}<br><b>日租账单里的这一笔会一起删掉</b>，这间房如果还挂着这笔生意会退回「可用」。`)) return;
+  const r = await api('/api/roomstatus/delete-record', { method: 'POST', body: { id } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(r.重置房态 ? `已删除，${r.房号} 退回可用` : '已删除');
+  渲染();
+};
+window.一键全清 = async function() {
+  const 脏 = 房态数据 ? 房态数据.概览.脏房 : 0;
+  if (!脏) { 提示('当前没有脏房'); return; }
+  if (!await 询问确认('全部标记为已清洁？', `${脏} 间脏房一次性恢复「可用」，每间各留一条清洁记录。`)) return;
+  const r = await api('/api/roomstatus/clean-all', { method: 'POST' });
+  if (r.错误) { 提示(r.错误); return; }
+  提示(`${r.数量} 间已清洁`); 渲染();
+};
 
 // ============ 退房 ============
 async function 渲染退房(容器) {
@@ -1156,25 +1531,54 @@ window.新增收支 = async function() {
 };
 window.删除收支 = async function(id) { await api(`/api/transactions/${id}`, { method: 'DELETE' }); 提示('已删除'); 渲染(); };
 
-// ============ 设置（二级导航：设置 / 数据） ============
-let 设置tab = '设置';
+// ============ 设置（左侧目录树 + 右侧详情） ============
+let 设置节点 = '主题';   // 当前选中的目录项，本次会话内保留（刷新页面回到主题模式）
 let 主题 = localStorage.getItem('主题') || '明亮';   // 每台设备各自记（localStorage），不占用数据文件
 let 房源删除模式 = false; const 房源选中 = new Set();
+
+// 设置目录树：加项 / 改顺序只动这张表，各项的详情由对应的 设置_xxx() 返回 HTML
+const 设置目录 = [
+  { 键: '主题', 图标: '🎨', 名: '主题模式', 渲染: 设置_主题 },
+  { 键: '安全', 图标: '🔒', 名: '安全设置', 渲染: 设置_安全 },
+  { 键: '导出', 图标: '📦', 名: '导出', 渲染: 设置_导出 },
+  { 键: '参数', 图标: '⚙️', 名: '参数', 渲染: 设置_参数 },
+  { 键: '关于', 图标: 'ℹ️', 名: '关于', 渲染: 设置_关于 }
+];
+function 当前设置项() { return 设置目录.find(x => x.键 === 设置节点) || 设置目录[0]; }
 
 function 应用主题() {
   document.documentElement.setAttribute('data-theme', 主题 === '暗黑' ? 'dark' : 'light');
 }
 async function 渲染设置(容器) {
   应用主题();
+  const 选中 = 当前设置项();
   容器.innerHTML = `
-    <div class="tab栏">
-      <button class="${设置tab==='设置'?'激活':''}" onclick="设置tab='设置';渲染()">设置</button>
-      <button class="${设置tab==='数据'?'激活':''}" onclick="设置tab='数据';渲染()">数据</button>
-    </div>
-    <div id="设置tab内容"></div>`;
-  const el = document.getElementById('设置tab内容');
-  if (设置tab === '数据') await 渲染数据tab(el); else await 渲染设置tab(el);
+    <div class="设置布局">
+      <nav class="设置目录">
+        ${设置目录.map(x => `<button class="设置项${x.键 === 选中.键 ? ' 激活' : ''}" data-键="${x.键}" onclick="选设置项('${x.键}')">
+          <span class="设置项图标">${x.图标}</span>
+          <span class="设置项文字"><b>${x.名}</b></span>
+        </button>`).join('')}
+      </nav>
+      <div class="设置详情" id="设置详情"></div>
+    </div>`;
+  await 刷新设置详情();
 }
+// 只重绘右侧详情，不动左边目录（保存后刷新、在线更新轮询都走这里）
+async function 刷新设置详情() {
+  const el = document.getElementById('设置详情');
+  if (!el) return;
+  el.innerHTML = await 当前设置项().渲染();
+}
+window.选设置项 = async function(键) {
+  if (设置节点 === 键) return;
+  设置节点 = 键;
+  房源删除模式 = false; 房源选中.clear();   // 换页时退出删除模式，避免残留勾选
+  // 只换高亮 + 重绘右侧详情，**不整页重渲染**：目录树 DOM 原地不动，位置才不会跳
+  document.querySelectorAll('.设置项').forEach(b => b.classList.toggle('激活', b.dataset.键 === 键));
+  window.scrollTo(0, 0);   // 长页切短页时浏览器会自动回滚，先归顶把这一跳吃掉
+  await 刷新设置详情();
+};
 // 「在线更新」卡片：检查更新 / 一键更新 / 更新日志（看各版本）。放在设置 tab 最底部
 function 在线更新卡片() {
   const v = 当前版本信息 || { 版本: '未知', 提交: '', 日期: '', 仓库: '' };
@@ -1207,7 +1611,12 @@ function 在线更新卡片() {
       : `<div style="font-size:13px;color:var(--次文字)">${(结果.提交列表 || []).map(c => `<div>${转义(c)}</div>`).join('')}</div>`;
 
     // 统一显示后端给的「不可更新原因」（工作区脏 / 本地已分叉），脏工作区再把具体文件列出来
-    const 阻止提示 = 结果.可更新 ? '' : `<p style="color:var(--红);font-size:13px;margin-top:8px">⚠️ ${转义(结果.不可更新原因 || '当前无法更新')}${(结果.本地改动 && 结果.本地改动.length) ? '。改动文件：' + 转义(结果.本地改动.join('、')) : ''}。「立即更新」已禁用。</p>`;
+    const 阻止提示 = 结果.可更新 ? '' : `<p style="color:var(--红);font-size:13px;margin-top:8px">⚠️ ${转义(结果.不可更新原因 || '当前无法更新')}${(结果.本地改动 && 结果.本地改动.length) ? '。改动文件：' + 转义(结果.本地改动.join('、')) : ''}。</p>`;
+
+    // 分叉时提供「强制同步到远程版本」按钮，丢弃本地旧提交、对齐远程（部署机常用）
+    const 强制同步按钮 = 结果.可强制同步
+      ? `<button class="btn 危险" onclick="强制同步()">⚠️ 强制同步到远程版本</button>`
+      : '';
 
     状态区 = `
       <p style="color:var(--主色);font-weight:700;margin-bottom:8px">🎉 发现新版本 v${转义(结果.最新版本)}（落后 ${结果.落后提交数} 个提交）</p>
@@ -1215,34 +1624,23 @@ function 在线更新卡片() {
       ${阻止提示}
       <div class="工具栏" style="margin-top:12px">
         <button class="btn 成功" ${结果.可更新 ? '' : 'disabled'} onclick="立即更新()">立即更新</button>
+        ${强制同步按钮}
       </div>`;
   }
-
-  const 日志区 = 版本日志展开
-    ? `<div class="更新日志区" style="margin-top:10px">
-        ${版本日志缓存 && 版本日志缓存.length
-          ? 版本日志缓存.map(段 => `<div style="margin-bottom:10px">
-              <b>${转义(段.版本)}</b>${段.日期 ? ` <span style="color:var(--次文字);font-size:12px">— ${转义(段.日期)}</span>` : ''}
-              <ul style="margin:4px 0 0 18px;font-size:13px">${(段.条目 || []).map(条 => `<li>${转义(条)}</li>`).join('') || '<li style="color:var(--次文字)">（本版本无条目）</li>'}</ul>
-            </div>`).join('')
-          : '<div style="color:var(--次文字)">暂无更新日志</div>'}
-      </div>`
-    : '';
 
   return `<div class="卡片">
     <h2>🔄 在线更新</h2>
     ${版本行}
     <div class="工具栏">
       <button class="btn" ${更新执行中 || 更新检查中 ? 'disabled' : ''} onclick="检查更新()">检查更新</button>
-      <button class="btn 次" ${更新执行中 ? 'disabled' : ''} onclick="切换版本日志()">更新日志 ${版本日志展开 ? '▲' : '▼'}</button>
+      <button class="btn 次" ${更新执行中 ? 'disabled' : ''} onclick="看更新日志()">📜 更新日志</button>
     </div>
     ${状态区}
-    ${日志区}
   </div>`;
 }
 window.检查更新 = async function() {
   更新检查中 = true;
-  const el = document.getElementById('设置tab内容'); if (el) await 渲染设置tab(el);
+  await 刷新设置详情();
   // 必须兜底：服务端返回非 JSON（重启中拿到 HTML 错误页等）时 r.json() 会抛错，
   // 不catch 的话 更新检查中 永远停在 true，按钮一直灰着，只能刷新页面才能恢复
   try {
@@ -1252,7 +1650,7 @@ window.检查更新 = async function() {
   } finally {
     更新检查中 = false;
   }
-  const el2 = document.getElementById('设置tab内容'); if (el2) 渲染设置tab(el2);
+  刷新设置详情();
 };
 window.立即更新 = async function() {
   if (!更新检查结果 || !更新检查结果.可更新) return;
@@ -1260,22 +1658,55 @@ window.立即更新 = async function() {
   if (!ok) return;
   const 旧提交 = (当前版本信息 && 当前版本信息.提交) || '';
   更新执行中 = true; 更新日志缓存 = ['⏳ 正在拉取更新…'];
-  const el = document.getElementById('设置tab内容'); if (el) 渲染设置tab(el);
+  刷新设置详情();
   const r = await api('/api/update/apply', { method: 'POST' });
   if (r.错误) {
     更新执行中 = false; 更新日志缓存 = r.日志 || [];
     提示('更新失败：' + r.错误);
-    const el2 = document.getElementById('设置tab内容'); if (el2) 渲染设置tab(el2);
+    刷新设置详情();
     return;
   }
   更新日志缓存 = r.日志 || [];
-  const el3 = document.getElementById('设置tab内容'); if (el3) 渲染设置tab(el3);
+  刷新设置详情();
   await 等服务重启(旧提交);
 };
-window.切换版本日志 = async function() {
-  版本日志展开 = !版本日志展开;
-  if (版本日志展开 && !版本日志缓存) 版本日志缓存 = await api('/api/update/changelog').catch(() => []);
-  const el = document.getElementById('设置tab内容'); if (el) 渲染设置tab(el);
+window.强制同步 = async function() {
+  if (!更新检查结果 || !更新检查结果.可强制同步) return;
+  const ok = await 询问确认('确认强制同步', `将丢弃本地 ${更新检查结果.领先提交数} 个未推送的提交，强制对齐到远程最新版 v${更新检查结果.最新版本}。期间服务会重启，数据已自动备份。`);
+  if (!ok) return;
+  const 旧提交 = (当前版本信息 && 当前版本信息.提交) || '';
+  更新执行中 = true; 更新日志缓存 = ['⏳ 正在强制同步…'];
+  刷新设置详情();
+  const r = await api('/api/update/force-sync', { method: 'POST' });
+  if (r.错误) {
+    更新执行中 = false; 更新日志缓存 = r.日志 || [];
+    提示('强制同步失败：' + r.错误);
+    刷新设置详情();
+    return;
+  }
+  更新日志缓存 = r.日志 || [];
+  刷新设置详情();
+  await 等服务重启(旧提交);
+};
+// 更新日志：弹模态框看，日志长了在框内滚动，不把设置页撑长
+window.看更新日志 = async function() {
+  if (!版本日志缓存) {
+    打开模态(`<h2>📜 更新日志</h2>
+      <p style="color:var(--次文字);font-size:13px">正在读取…</p>`);
+    版本日志缓存 = await api('/api/update/changelog').catch(() => []);
+  }
+  const 段落 = 版本日志缓存 || [];
+  const 正文 = 段落.length
+    ? 段落.map(段 => `<div class="日志段">
+        <div class="日志段头"><b>${转义(段.版本)}</b>${段.日期 ? `<span>${转义(段.日期)}</span>` : ''}</div>
+        <ul>${(段.条目 || []).map(条 => `<li>${转义(条)}</li>`).join('') || '<li style="color:var(--次文字)">（本版本无条目）</li>'}</ul>
+      </div>`).join('')
+    : '<div style="color:var(--次文字);padding:8px 0">暂无更新日志</div>';
+  打开模态(`<h2>📜 更新日志</h2>
+    <div class="日志滚动区">${正文}</div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn 次" onclick="关闭模态()">关闭</button>
+    </div>`);
 };
 // 更新/回滚成功后轮询 /api/version，等新进程真的起来了（提交号变化）再刷新页面。
 // 重启期间连不上是预期行为，不弹错误提示。
@@ -1294,45 +1725,42 @@ async function 等服务重启(旧提交) {
   }
   更新执行中 = false;
   提示('服务重启超时，请手动刷新页面或检查服务端窗口');
-  const el = document.getElementById('设置tab内容'); if (el) 渲染设置tab(el);
+  刷新设置详情();
 }
-async function 渲染设置tab(el) {
-  const s = 全局.settings;
-  const [账号, 版本信息] = await Promise.all([
-    api('/api/account').catch(() => ({ 用户名: '' })),
-    api('/api/version').catch(() => ({ 版本: '未知', 提交: '', 日期: '' }))
-  ]);
-  当前版本信息 = 版本信息;
-  el.innerHTML = `
+// 主题模式：明亮 / 暗黑，存 localStorage，每台设备各记各的
+function 设置_主题() {
+  return `
     <div class="卡片">
-      <h2>主题模式</h2>
+      <h2>🎨 主题模式</h2>
       <div class="工具栏">
         <button class="btn ${主题==='明亮'?'':'次'}" onclick="切换主题('明亮')">☀ 明亮</button>
         <button class="btn ${主题==='暗黑'?'':'次'}" onclick="切换主题('暗黑')">🌙 暗黑</button>
       </div>
       <p style="color:var(--次文字);font-size:13px">主题选择存在本浏览器，手机和电脑各自记忆、互不影响。</p>
-    </div>
+    </div>`;
+}
+// 安全设置：登录密码（改密要验当前密码，新密码输两遍）
+async function 设置_安全() {
+  const 账号 = await api('/api/account').catch(() => ({ 用户名: '' }));
+  return `
     <div class="卡片">
-      <h2>当前月份</h2>
-      <div class="工具栏">
-        <input id="设月份" type="month" value="${s.当前月份}">
-        <button class="btn" onclick="保存设置()">保存</button>
-        <button class="btn 次" onclick="切下月()">下月 ▶（一键切月）</button>
-      </div>
-      <p style="color:var(--次文字);font-size:13px;margin-top:8px">一键切月会先把本月固化进历史总账单，再把当前月份 +1。</p>
-    </div>
-    <div class="卡片">
-      <h2>登录密码</h2>
+      <h2>🔒 登录密码</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">当前登录用户名：<b style="color:var(--文字)">${转义(账号.用户名 || '—')}</b>。改密后需重新登录（浏览器会重新弹出登录框）。</p>
       <div class="表单">
         <div class="字段"><label>当前密码</label><input id="密当前" type="password" autocomplete="current-password"></div>
         <div class="字段"><label>新用户名（留空则不变）</label><input id="密用户" autocomplete="username"></div>
         <div class="字段"><label>新密码（至少 6 位）</label><input id="密新" type="password" autocomplete="new-password"></div>
+        <div class="字段"><label>确认新密码（再输一次）</label><input id="密新2" type="password" autocomplete="new-password"></div>
       </div>
       <div style="margin-top:12px"><button class="btn" onclick="修改密码()">修改登录密码</button></div>
-    </div>
+    </div>`;
+}
+// 导出：整库备份 / 迁移 + 按月按类型导 CSV
+function 设置_导出() {
+  const s = 全局.settings;
+  return `
     <div class="卡片">
-      <h2>数据备份 / 迁移</h2>
+      <h2>📦 数据备份 / 迁移</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">导出：下载一份完整数据备份（含所有房客、账单、抄表、退房、历史账单、备忘录）；导入：上传备份文件覆盖当前数据（用于换设备、迁移到线上服务器）。登录密码不在备份里，不会被覆盖。</p>
       <div class="工具栏">
         <a class="btn" href="/api/export" download>导出数据备份</a>
@@ -1354,16 +1782,10 @@ async function 渲染设置tab(el) {
         </select>
         <button class="btn" onclick="导出账单()">导出</button>
       </div>
-    </div>
-    <div class="卡片">
-      <p style="color:var(--次文字);font-size:13px">
-        默认水价 ${s.水价}元/方、电价 ${s.电价}元/度（在「房间档案」每间房可单独覆盖）。<br>
-        数据存在本机 <code>data\\数据.json</code>，备份复制这个文件即可。
-      </p>
-    </div>
-    ${在线更新卡片()}`;
+    </div>`;
 }
-async function 渲染数据tab(el) {
+// 参数：当前月份 + 房源清单 + 水电变量 + 工资变量（全楼公用的那些值都在这）
+async function 设置_参数() {
   const s = 全局.settings;
   const [房源, rooms] = await Promise.all([api('/api/houses'), api('/api/rooms')]);
   const 在租集合 = new Set(rooms.filter(r => r.月租金 !== '' && r.月租金 != null).map(r => r.房号));
@@ -1392,8 +1814,26 @@ async function 渲染数据tab(el) {
       <button class="btn 小 次" onclick="切换房源删除模式()">退出删除模式</button>
     </div>` : ''}`;
 
-  el.innerHTML = `
+  return `
+    <div class="卡片">
+      <h2>📅 当前月份</h2>
+      <div class="工具栏">
+        <input id="设月份" type="month" value="${s.当前月份}">
+        <button class="btn" onclick="保存设置()">保存</button>
+        <button class="btn 次" onclick="切下月()">下月 ▶（一键切月）</button>
+      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-top:8px">一键切月会先把本月固化进历史总账单，再把当前月份 +1。</p>
+    </div>
     ${折叠卡片('房源', `<h2 style="margin:0">🏠 房源信息（${房源.length} 间）</h2>`, `<p style="color:var(--次文字);font-size:13px;margin-bottom:12px">这里是楼里全部房号的清单，总览空置房间、房间档案都以它为准；出租前先在此添加房源。在租/日租/自住房不能被删除。</p>` + 房源表)}
+    <div class="卡片">
+      <h2>💧 水电变量</h2>
+      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">全楼默认单价。房间档案、水电抄表、退房结算里的单价<b>留空就跟随这里</b>；哪间房要单独定价，就在「房间档案」里填数字覆盖，只影响那一间。改动只影响之后新算的账单，已生成的历史账单不变。</p>
+      <div class="表单 两列">
+        <div class="字段"><label>水费单价（元/方）</label><input id="设水价" type="number" step="0.01" min="0" value="${s.水价}"></div>
+        <div class="字段"><label>电费单价（元/度）</label><input id="设电价" type="number" step="0.01" min="0" value="${s.电价}"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn" onclick="保存水电单价()">保存水电单价</button></div>
+    </div>
     <div class="卡片">
       <h2>💰 工资变量</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">按起始月份分段生效，影响「总账单」和总览的工资/利润/净利润计算；改动的分段只影响它之后的历史月份，之前的历史数字不变。起始月份之前、以及没有匹配分段的月份按 0 算。</p>
@@ -1409,25 +1849,34 @@ async function 渲染数据tab(el) {
       </div>
     </div>`;
 }
+// 关于：版本号 + 在线更新 + 数据文件在哪
+async function 设置_关于() {
+  const v = await api('/api/version').catch(() => null);
+  if (v) 当前版本信息 = v;   // 拉不到（更新重启中）就沿用上一次的，别把版本号抹成「未知」
+  return 在线更新卡片();
+}
 window.切换主题 = function(新主题) {
   主题 = 新主题; localStorage.setItem('主题', 主题); 应用主题();
-  const el = document.getElementById('设置tab内容');
-  if (el) 渲染设置tab(el); // 只刷新设置tab，按钮高亮跟着变
+  刷新设置详情();   // 只刷新右侧详情，按钮高亮跟着变
 };
 window.修改密码 = async function() {
   const 当前 = document.getElementById('密当前').value;
   const 用户名 = document.getElementById('密用户').value.trim();
   const 新密码 = document.getElementById('密新').value;
+  const 确认密码 = document.getElementById('密新2').value;
   if (!当前) { 提示('请输入当前密码'); return; }
   if (!新密码 || 新密码.length < 6) { 提示('新密码至少 6 位'); return; }
-  const r = await api('/api/password', { method: 'POST', body: { 当前密码: 当前, 新用户名: 用户名, 新密码 } });
+  if (确认密码 !== 新密码) { 提示('两次输入的新密码不一致'); return; }   // 防打错，后端也再校验一次
+  if (!await 询问确认('修改登录密码', `确定要把登录密码改掉吗？<br>改完浏览器会重新弹登录框，需要用新密码登录。`)) return;
+  const r = await api('/api/password', { method: 'POST', body: { 当前密码: 当前, 新用户名: 用户名, 新密码, 确认密码 } });
   if (r.错误) { 提示(r.错误); return; }
   alert('登录密码已修改为：' + r.用户名 + '\n\n下次访问需用新密码登录（浏览器会重新弹登录框）。');
   关闭模态(); 渲染();
 };
-window.切换房源删除模式 = function() { 房源删除模式 = !房源删除模式; 房源选中.clear(); 渲染(); };
-window.房源选中切换 = function(id, 选中) { 选中 ? 房源选中.add(id) : 房源选中.delete(id); 渲染(); };
-window.房源全选 = function(全选) { 房源选中.clear(); if (全选) document.querySelectorAll('#设置tab内容 input[type="checkbox"][data-id]').forEach(c => 房源选中.add(Number(c.dataset.id))); 渲染(); };
+// 设置页里的操作一律只重绘右侧详情（别整页 渲染()，否则目录树跟着重建、页面会跳）
+window.切换房源删除模式 = function() { 房源删除模式 = !房源删除模式; 房源选中.clear(); 刷新设置详情(); };
+window.房源选中切换 = function(id, 选中) { 选中 ? 房源选中.add(id) : 房源选中.delete(id); 刷新设置详情(); };
+window.房源全选 = function(全选) { 房源选中.clear(); if (全选) document.querySelectorAll('#设置详情 input[type="checkbox"][data-id]').forEach(c => 房源选中.add(Number(c.dataset.id))); 刷新设置详情(); };
 window.批量删除房源 = async function() {
   if (!房源选中.size) { 提示('请先选中要删除的房源'); return; }
   if (!confirm(`确定删除选中的 ${房源选中.size} 间房源？（仅限空置房源）`)) return;
@@ -1436,7 +1885,18 @@ window.批量删除房源 = async function() {
     const r = await api(`/api/houses/${id}`, { method: 'DELETE' });
     if (!r.错误) 成功++;
   }
-  房源选中.clear(); 提示(`已删除 ${成功} 间`); 渲染();
+  房源选中.clear(); 提示(`已删除 ${成功} 间`); 刷新设置详情();
+};
+// 保存全楼默认水电单价（房间档案里留空的房间跟着变）
+window.保存水电单价 = async function() {
+  const 水价 = Number(document.getElementById('设水价').value);
+  const 电价 = Number(document.getElementById('设电价').value);
+  if (!(水价 > 0)) { 提示('水费单价要填大于 0 的数字'); return; }
+  if (!(电价 > 0)) { 提示('电费单价要填大于 0 的数字'); return; }
+  if (!await 询问确认('保存水电单价', `水费 ${精金额(水价)} 元/方、电费 ${精金额(电价)} 元/度。<br>房间档案里单价留空的房间，往后都按这个价算。`)) return;
+  const s = await api('/api/settings', { method: 'POST', body: { 水价, 电价 } });
+  if (s.错误) { 提示(s.错误); return; }
+  全局.settings = s; 提示('已保存'); 刷新设置详情();
 };
 window.添加工资分段 = async function() {
   const 起始 = document.getElementById('新工资起始').value;
@@ -1448,13 +1908,13 @@ window.添加工资分段 = async function() {
   const 新分段 = 已有 ? 分段.map(x => x.起始月份 === 起始 ? { 起始月份: 起始, 金额 } : x)
                      : [...分段, { 起始月份: 起始, 金额 }];
   const s = await api('/api/settings', { method: 'POST', body: { 工资分段: 新分段 } });
-  全局.settings = s; 提示('已保存'); 渲染();
+  全局.settings = s; 提示('已保存'); 刷新设置详情();
 };
 window.删除工资分段 = async function(起始) {
   if (!confirm(`删除「${起始}」这个工资分段？`)) return;
   const 新分段 = (全局.settings.工资分段 || []).filter(x => x.起始月份 !== 起始);
   const s = await api('/api/settings', { method: 'POST', body: { 工资分段: 新分段 } });
-  全局.settings = s; 提示('已删除'); 渲染();
+  全局.settings = s; 提示('已删除'); 刷新设置详情();
 };
 window.导出账单 = async function() {
   const 月 = document.getElementById('导月份').value;
@@ -1532,14 +1992,14 @@ window.添加房源 = async function() {
   if (!房号) { 提示('请填房号'); return; }
   const r = await api('/api/houses', { method: 'POST', body: { 房号, 房型 } });
   if (r.错误) { 提示(r.错误); return; }
-  提示('已添加'); 渲染();
+  提示('已添加'); 刷新设置详情();
 };
 window.切换房型 = async function(id, 当前) {
   const 顺序 = ['月租', '日租', '自住房'];
   const i = 顺序.indexOf(当前 || '月租');
   const 新 = 顺序[(i + 1) % 顺序.length];
   await api(`/api/houses/${id}`, { method: 'PUT', body: { 房型: 新 } });
-  提示('已切换为' + 新); 渲染();
+  提示('已切换为' + 新); 刷新设置详情();
 };
 
 (async function 初始化() { 应用主题(); 全局 = await api('/api/all'); 渲染(); })();

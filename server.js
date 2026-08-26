@@ -81,7 +81,7 @@ function 触发重启() {
 function 清理旧备份(目录, 保留 = 20) {
   try {
     const 文件 = fs.readdirSync(目录)
-      .filter(f => /^(更新前|回滚前)_.*\.json$/.test(f))
+      .filter(f => /^(更新前|回滚前|强制同步前)_.*\.json$/.test(f))
       .map(f => ({ 名: f, 时间: fs.statSync(path.join(目录, f)).mtimeMs }))
       .sort((a, b) => a.时间 - b.时间);
     for (const x of 文件.slice(0, Math.max(0, 文件.length - 保留))) fs.unlinkSync(path.join(目录, x.名));
@@ -116,6 +116,45 @@ function 读凭据() {
   console.log('========================================\n');
   const 凭据 = 造凭据(默认用户名, 初始密码); 写凭据(凭据); return 凭据;
 }
+// ============ 客人档案（data\客人档案.json，独立文件） ============
+// 登记过身份证或电话的客人存一份，下次录同一个人时按姓名带出来，省得重复敲。
+// 单独放一个文件：跟 数据.json 解耦，坏了也只影响「自动填充」这一个便利功能，不影响账目。
+const 客人档案文件 = path.join(数据目录, '客人档案.json');
+function 读客人档案() {
+  try { const a = JSON.parse(fs.readFileSync(客人档案文件, 'utf8')); return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }   // 不存在/损坏都按空档案处理，绝不能因此挡住入住登记
+}
+function 写客人档案(列表) {
+  try {
+    fs.mkdirSync(数据目录, { recursive: true });
+    const 临时 = 客人档案文件 + '.tmp';
+    fs.writeFileSync(临时, JSON.stringify(列表, null, 2), 'utf8'); fs.renameSync(临时, 客人档案文件);
+  } catch (e) { console.error('客人档案写入失败（不影响主流程）：' + e.message); }
+}
+// 记一位客人：要有姓名，且身份证/电话/备注至少填了一个。认人优先看身份证（同名不同人太常见）
+// 档案id：前端从档案带出来时回传的来源 id。带了它就**覆盖那一条**（用户改了什么就存什么），不新增。
+function 记客人(姓名, 身份证, 电话, 备注, 档案id) {
+  const 名 = String(姓名 || '').trim(), 证 = String(身份证 || '').trim();
+  const 话 = String(电话 || '').trim(), 备 = String(备注 || '').trim();
+  if (!名 || (!证 && !话 && !备)) return null;
+  const 档案 = 读客人档案();
+  const 来源 = (档案id != null && 档案id !== '') ? 档案.find(x => x.id === Number(档案id)) : null;
+  let 条 = 来源 || (证 ? 档案.find(x => String(x.身份证 || '') === 证)
+                       : 档案.find(x => x.姓名 === 名 && String(x.电话 || '') === 话));
+  if (!条) { 条 = { id: 新id(档案), 姓名: 名, 身份证: 证, 电话: 话, 备注: 备 }; 档案.push(条); }
+  else if (来源) {
+    // 就是这条被带出去改过的：姓名/证/话 直接覆盖（改空也算改），
+    // 备注只在传了内容时更新——月租那边不传备注、日租非首行也不传，不能因此把已存的备注抹掉
+    条.姓名 = 名; 条.身份证 = 证; 条.电话 = 话;
+    if (备) 条.备注 = 备;
+  } else {
+    条.姓名 = 名; if (证) 条.身份证 = 证; if (话) 条.电话 = 话; if (备) 条.备注 = 备;   // 老条目只补不清空
+  }
+  条.更新时间 = new Date().toISOString();
+  写客人档案(档案);
+  return 条;
+}
+
 // 定长比较，避免用耗时差反推密码
 function 定长相等(甲, 乙) {
   const a = Buffer.from(甲), b = Buffer.from(乙);
@@ -157,7 +196,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 function 当前月份() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 // 工资分段默认值：2024-03 起每月 4000（与历史口径一致，改动只影响之后新增的分段）
 function 默认工资分段() { return [{ 起始月份: '2024-03', 金额: 4000 }]; }
-function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段() }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 备忘录: [] }; }
+function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段() }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
 // 某月工资 = 起始月份 ≤ 该月 的分段里，起始月份最大的那条；都不满足则 0；未来月份（没到当月）不发工资
 function 月工资(settings, 月份) {
   if (String(月份) > 当前月份()) return 0;
@@ -200,6 +239,9 @@ function 迁移(data) {
     if (!('房号' in d)) d.房号 = '';
   }
   if (!Array.isArray(data.备忘录)) data.备忘录 = []; // 备忘录：全局常驻，与月份无关
+  // 日租房态：一间日租房一条，记「当前」住着谁 / 是不是脏房。daily 仍是账单唯一来源，这里只管房间状态
+  if (!Array.isArray(data.日租房态)) data.日租房态 = [];
+  if (!Array.isArray(data.日租清洁记录)) data.日租清洁记录 = [];
   // 工资分段：老数据没有这个字段时补默认，保证历史 41 个月的工资/净利润与改造前完全一致
   if (!Array.isArray(data.settings.工资分段) || !data.settings.工资分段.length) data.settings.工资分段 = 默认工资分段();
   if (!data.退房记录) data.退房记录 = [];
@@ -327,21 +369,49 @@ function 缺项(房) {
 
 // ============ API ============
 app.get('/api/all', (req, res) => res.json(读数据()));
-app.post('/api/settings', (req, res) => { const data = 读数据(); Object.assign(data.settings, req.body); 写数据(data); res.json(data.settings); });
+app.post('/api/settings', (req, res) => {
+  const data = 读数据();
+  const 补丁 = Object.assign({}, req.body);
+  // 水电单价存进来必须是大于 0 的数字：存成空串/文字会让 房水价() 退化成 0，整月水电费白算
+  for (const 键 of ['水价', '电价']) {
+    if (!(键 in 补丁)) continue;
+    const 值 = Number(补丁[键]);
+    if (!(值 > 0)) return res.status(400).json({ 错误: `${键}必须是大于 0 的数字` });
+    补丁[键] = 值;
+  }
+  Object.assign(data.settings, 补丁);
+  写数据(data); res.json(data.settings);
+});
 
 // 登录账号：只回用户名，绝不返回哈希/盐
 app.get('/api/account', (req, res) => res.json({ 用户名: 读凭据().用户名 }));
 // 修改登录账号密码：必须先验证当前密码
 app.post('/api/password', (req, res) => {
-  const { 当前密码, 新用户名, 新密码 } = req.body || {};
+  const { 当前密码, 新用户名, 新密码, 确认密码 } = req.body || {};
   const 凭据 = 读凭据();
   if (!校验凭据(凭据.用户名, String(当前密码 || ''))) return res.status(403).json({ 错误: '当前密码不正确' });
   const 用户名 = String(新用户名 == null || 新用户名 === '' ? 凭据.用户名 : 新用户名).trim();
   const 密码 = String(新密码 || '');
   if (!用户名) return res.status(400).json({ 错误: '用户名不能为空' });
   if (密码.length < 6) return res.status(400).json({ 错误: '新密码至少 6 位' });
+  // 前端已比对过两次输入，这里再兜一次，防止绕过页面直接调接口打错密码把自己锁在外面
+  if (确认密码 != null && String(确认密码) !== 密码) return res.status(400).json({ 错误: '两次输入的新密码不一致' });
   写凭据(造凭据(用户名, 密码));
   res.json({ ok: true, 用户名 });
+});
+
+// 客人档案：带 name 查这个人（用于自动填身份证/电话），不带 name 回姓名清单（给输入框做建议）
+app.get('/api/guests', (req, res) => {
+  const 名 = String(req.query.name || '').trim();
+  const 档案 = 读客人档案();
+  if (!名) {
+    const 姓名们 = [...new Set(档案.map(x => x.姓名).filter(Boolean))].slice(0, 300);
+    return res.json({ 命中: null, 姓名们, 总数: 档案.length });
+  }
+  // 同名可能是好几个人（身份证/电话不同），全部回给前端，由用户挑；最近登记的排前面
+  const 候选 = 档案.filter(x => x.姓名 === 名)
+    .sort((a, b) => String(b.更新时间 || '').localeCompare(String(a.更新时间 || '')));
+  res.json({ 候选, 同名数: 候选.length, 总数: 档案.length });
 });
 
 // 房间档案列表 = 房源清单（全部房号）合并其「在租」档案；空置房源返回空字段 + 房源id
@@ -359,7 +429,11 @@ app.post('/api/rooms', (req, res) => {
   const 房号 = req.body.房号;
   if (!房号 || !data.房源.some(h => h.房号 === 房号)) return res.status(400).json({ 错误: `房号「${房号}」不在房源清单里，请先在「设置 → 房源信息」添加` });
   if (data.rooms.some(r => r.房号 === 房号)) return res.status(400).json({ 错误: `房号「${房号}」已在租` });
-  const 房 = { id: 新id(data.rooms), ...req.body }; data.rooms.push(房);
+  const 档案id = req.body.档案id;
+  const 房 = { id: 新id(data.rooms), ...req.body };
+  delete 房.档案id;   // 这个字段只为回写客人档案而来，不该存进房间档案
+  data.rooms.push(房);
+  记客人(房.租客姓名, 房.身份证, 房.电话, '', 档案id);   // 月租不带备注（按用户要求）
   // 自动生成初始抄表记录：日期=入住日，读数=水电底度
   if (房.入住日 && ((房.水表底度 !== '' && 房.水表底度 != null) || (房.电表底度 !== '' && 房.电表底度 != null))) {
     data.meters.push({ id: 新id(data.meters), 日期: 房.入住日, 房号, 水表: 房.水表底度 || null, 电表: 房.电表底度 || null });
@@ -369,7 +443,12 @@ app.post('/api/rooms', (req, res) => {
 app.put('/api/rooms/:id', (req, res) => {
   const data = 读数据(); const i = data.rooms.findIndex(r => r.id == req.params.id);
   if (i < 0) return res.status(404).json({ 错误: '房间不存在' });
-  data.rooms[i] = { ...data.rooms[i], ...req.body, id: data.rooms[i].id }; 写数据(data); res.json(data.rooms[i]);
+  const 档案id = req.body.档案id;
+  data.rooms[i] = { ...data.rooms[i], ...req.body, id: data.rooms[i].id };
+  delete data.rooms[i].档案id;   // 同上：不存进房间档案
+  写数据(data);
+  记客人(data.rooms[i].租客姓名, data.rooms[i].身份证, data.rooms[i].电话, '', 档案id);   // 编辑时补填的也存档
+  res.json(data.rooms[i]);
 });
 // 删除：有租客的房间锁定，不能删
 app.delete('/api/rooms/:id', (req, res) => {
@@ -622,6 +701,252 @@ app.get('/api/daily', (req, res) => {
 app.post('/api/daily', (req, res) => { const data = 读数据(); const 记录 = { id: 新id(data.daily), ...req.body, 入住天数: Number(req.body.入住天数) || 1 }; data.daily.push(记录); 写数据(data); res.json(记录); });
 app.delete('/api/daily/:id', (req, res) => { const data = 读数据(); data.daily = data.daily.filter(d => d.id != req.params.id); 写数据(data); res.json({ ok: true }); });
 
+// ============ 日租房态（EBK 房态图：空闲 → 在住 → 脏房 → 空闲） ============
+// 账单口径不变：daily 仍是日租收入的唯一来源，办入住时写一条，退房/清洁只改房间状态、不动钱。
+// 路由一律英文（坑 1：中文 URL 路由会失败）。
+const 房态状态集 = ['空闲', '在住', '脏房'];
+// 日租营业日：早 6 点换日。8-26 06:00 ~ 8-27 05:59 的生意全算 8-26 这一天。
+// 必须用本地时间（服务器在 +08），不能用 toISOString——那是 UTC，中国时间早 8 点前会退成前一天。
+function 营业日(时刻) {
+  const d = 时刻 ? new Date(时刻) : new Date();
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 把房态清回「空闲」：撤销入住、删记录、确认清洁都用它，免得各处漏字段
+function 清空房态(态, 额外) {
+  Object.assign(态, { 状态: '空闲', 客人: '', 客人们: [], 电话: '', 身份证: '', 入住日: '', 天数: 0, 金额: 0, 备注: '', 日租id: null, 入住时间: '', 退房时间: '', 清洁时间: '', 房型: '', 时长小时: 0, 预计退房: '' }, 额外 || {});
+}
+// 钟点房到点自动转脏房。用「惰性结算」而不是定时器：每次读房态时顺手判一下，
+// 服务重启也不会漏（定时器一重启就没了），代价只是没人看页面时状态不会自己变——但看的那一刻就对了
+function 结算超时钟点房(data) {
+  const 现在 = Date.now();
+  let 变了 = false;
+  for (const 态 of data.日租房态) {
+    if (态.状态 !== '在住' || 态.房型 !== '钟点' || !态.预计退房) continue;
+    const 到点 = new Date(态.预计退房).getTime();
+    if (isFinite(到点) && 到点 <= 现在) {
+      态.状态 = '脏房';
+      态.退房时间 = 态.预计退房;   // 记到点时刻，不是发现时刻
+      变了 = true;
+    }
+  }
+  return 变了;
+}
+// 入住登记的客人列表：新版前端传 客人们 数组，老写法（单个 客人/电话/身份证）也认
+function 读客人们(体) {
+  const 净 = x => ({
+    姓名: String(x && x.姓名 || '').trim(), 电话: String(x && x.电话 || '').trim(),
+    身份证: String(x && x.身份证 || '').trim(),
+    档案id: (x && x.档案id != null && x.档案id !== '') ? Number(x.档案id) : null   // 只用于回写客人档案
+  });
+  const 有内容 = x => x.姓名 || x.电话 || x.身份证;
+  if (Array.isArray(体.客人们)) {
+    const 列 = 体.客人们.map(净).filter(有内容);
+    if (列.length) return 列;
+  }
+  const 单 = 净({ 姓名: 体.客人, 电话: 体.电话, 身份证: 体.身份证 });
+  return 有内容(单) ? [单] : [];
+}
+// 钟点房的到点时刻 = 起算时间 + 时长
+function 算预计退房(起算, 小时) {
+  const t = new Date(起算 || Date.now()).getTime() + (Number(小时) || 0) * 3600 * 1000;
+  return new Date(t).toISOString();
+}
+function 取房态(data, 房号) { return data.日租房态.find(x => x.房号 === 房号) || null; }
+// 拿一间房的房态，没有就地建一条「空闲」
+function 保房态(data, 房号) {
+  let 态 = 取房态(data, 房号);
+  if (!态) { 态 = { 房号, 状态: '空闲' }; data.日租房态.push(态); }
+  return 态;
+}
+function 是日租房(data, 房号) { return data.房源.some(h => h.房号 === 房号 && h.房型 === '日租'); }
+// 房费必须是「填了的、非负的数字」。注意 Number('') === 0，不先挡空值的话空输入会蒙混成 0 元账单
+function 读金额(值) {
+  if (值 === '' || 值 == null) return null;
+  const n = Number(值);
+  return isFinite(n) && n >= 0 ? 舍入(n) : null;
+}
+// 到期日 = 入住日 + 天数（住 2 晚 = 后天走）
+function 加天(日期, 天数) {
+  const [y, m, d] = String(日期 || '').slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const t = new Date(Date.UTC(y, m - 1, d + (Number(天数) || 0)));
+  return t.toISOString().slice(0, 10);
+}
+// 房态图数据：以「房源里房型=日租」为准，房态只是附加信息（房源被删/改房型，这里自动不显示）
+app.get('/api/roomstatus', (req, res) => {
+  const data = 读数据();
+  if (结算超时钟点房(data)) 写数据(data);   // 到点的钟点房先落成脏房，再往下算概览
+  const 今日 = 营业日();   // 早 6 点换日，不是自然日
+  const 房间 = 按房号排序(data.房源.filter(h => h.房型 === '日租')).map(h => {
+    const 态 = 取房态(data, h.房号) || { 房号: h.房号, 状态: '空闲' };
+    const 钟点 = 态.房型 === '钟点';
+    // 全天房看到期日，钟点房看到点时刻；两者只会有一个生效
+    const 到期日 = (态.状态 === '在住' && !钟点) ? 加天(态.入住日, 态.天数) : '';
+    const 剩余分钟 = (态.状态 === '在住' && 钟点 && 态.预计退房)
+      ? Math.round((new Date(态.预计退房).getTime() - Date.now()) / 60000) : null;
+    return {
+      房号: h.房号, 状态: 房态状态集.includes(态.状态) ? 态.状态 : '空闲',
+      客人: 态.客人 || '', 客人们: Array.isArray(态.客人们) ? 态.客人们 : [], 电话: 态.电话 || '', 身份证: 态.身份证 || '', 入住日: 态.入住日 || '', 天数: Number(态.天数) || 0,
+      金额: Number(态.金额) || 0, 备注: 态.备注 || '', 日租id: 态.日租id ?? null,
+      入住时间: 态.入住时间 || '', 退房时间: 态.退房时间 || '', 清洁时间: 态.清洁时间 || '',
+      房型: 态.状态 === '在住' ? (钟点 ? '钟点' : '全天') : '', 时长小时: Number(态.时长小时) || 0,
+      预计退房: 钟点 ? (态.预计退房 || '') : '', 剩余分钟,
+      到期日, 已超期: !!(到期日 && 到期日 < 今日), 今日到期: !!(到期日 && 到期日 === 今日)
+    };
+  });
+  // 今日入住记录 = 本营业日的 daily 流水（新录的在上），可逐条删；删一条 = 那笔生意作废
+  const 今日入住 = data.daily.filter(d => (d.日期 || '') === 今日)
+    .map(d => ({ id: d.id, 房号: d.房号 || '', 客人: d.客人 || '', 入住天数: Number(d.入住天数) || 1, 金额: Number(d.金额) || 0 }))
+    .sort((a, b) => b.id - a.id);
+  const 今日收入 = 今日入住.reduce((s, d) => s + d.金额, 0);
+  res.json({
+    今日: 今日, 房间, 今日入住,
+    概览: {
+      在住: 房间.filter(r => r.状态 === '在住').length,
+      脏房: 房间.filter(r => r.状态 === '脏房').length,
+      可用: 房间.filter(r => r.状态 === '空闲').length,
+      今日收入: 舍入(今日收入)
+    }
+  });
+});
+// 删掉一条入住记录：daily 里那条一起删；哪间房的房态正指着它，就把那间退回「空闲」
+app.post('/api/roomstatus/delete-record', (req, res) => {
+  const data = 读数据();
+  const id = Number(req.body.id);
+  const 记录 = data.daily.find(d => d.id === id);
+  if (!记录) return res.status(400).json({ 错误: '这条记录已经不在了，刷新一下' });
+  data.daily = data.daily.filter(d => d.id !== id);
+  const 态 = data.日租房态.find(x => x.日租id === id);
+  if (态) 清空房态(态);
+  写数据(data);
+  res.json({ ok: true, 房号: 记录.房号 || '', 金额: Number(记录.金额) || 0, 重置房态: !!态 });
+});
+// 办入住：写一条 daily（账单当天就能看到）+ 房间转「在住」
+app.post('/api/roomstatus/checkin', (req, res) => {
+  const data = 读数据();
+  const 房号 = String(req.body.房号 || '').trim();
+  if (!是日租房(data, 房号)) return res.status(400).json({ 错误: '该房号不是日租房（去「设置 → 参数 → 房源信息」把房型改成日租）' });
+  const 态 = 保房态(data, 房号);
+  if (态.状态 === '在住') return res.status(400).json({ 错误: `${房号} 正在住人，请先退房` });
+  if (态.状态 === '脏房') return res.status(400).json({ 错误: `${房号} 还是脏房，请先确认清洁` });
+  const 入住日 = String(req.body.入住日 || '').slice(0, 10) || 营业日();   // 凌晨办的入住算前一天
+  const 钟点 = req.body.房型 === '钟点';
+  const 时长小时 = 钟点 ? Math.max(0.5, Number(req.body.时长小时) || 3) : 0;   // 钟点房默认 3 小时，可改
+  const 天数 = 钟点 ? 1 : Math.max(1, Number(req.body.天数) || 1);            // 钟点房在账单里按 1 个单元记
+  const 金额 = 读金额(req.body.金额);
+  if (金额 === null) return res.status(400).json({ 错误: '请填写房费金额' });
+  // 账单记录：字段与手工录入时完全一致，/api/summary、/api/settle、CSV 导出口径不变
+  // 一次入住可以登记多位客人。客人们[0] 当主客，姓名合起来写进账单的「客人」列
+  const 客人们 = 读客人们(req.body);
+  const 主客 = 客人们[0] || { 姓名: '', 电话: '', 身份证: '' };
+  const 客人 = 客人们.map(x => x.姓名).filter(Boolean).join('、');
+  const 身份证 = 主客.身份证;
+  // 0 元不入账：房间照样占上（自用/免费房），但不往 daily 写记录，日租id 留空
+  let 账单 = null;
+  if (金额 > 0) {
+    账单 = { id: 新id(data.daily), 日期: 入住日, 房号, 客人, 身份证, 入住天数: 天数, 金额, 房型: 钟点 ? '钟点' : '全天' };
+    data.daily.push(账单);
+  }
+  const 入住时间 = new Date().toISOString();
+  Object.assign(态, {
+    状态: '在住', 客人,
+    客人们: 客人们.map(({ 姓名, 电话, 身份证 }) => ({ 姓名, 电话, 身份证 })),   // 档案id 不落进房态
+    电话: 主客.电话, 身份证, 入住日, 天数,
+    金额, 备注: String(req.body.备注 || '').trim(), 日租id: 账单 ? 账单.id : null,
+    入住时间, 退房时间: '', 清洁时间: '',
+    房型: 钟点 ? '钟点' : '全天', 时长小时,
+    预计退房: 钟点 ? 算预计退房(入住时间, 时长小时) : ''
+  });
+  // 每位都存档；备注是整单一个字段，记给第一位客人（自动填充时也只有第一行姓名会带出备注）
+  客人们.forEach((g, i) => 记客人(g.姓名, g.身份证, g.电话, i === 0 ? 态.备注 : '', g.档案id));
+  写数据(data);
+  res.json({ ok: true, 房态: 态, 账单, 已入账: !!账单 });
+});
+// 续住 / 改价：同步改掉入住时写的那条 daily，避免房态与账单对不上
+app.post('/api/roomstatus/extend', (req, res) => {
+  const data = 读数据();
+  const 态 = 取房态(data, String(req.body.房号 || '').trim());
+  if (!态 || 态.状态 !== '在住') return res.status(400).json({ 错误: '该房间当前没有在住客人' });
+  const 钟点 = 态.房型 === '钟点';
+  const 天数 = 钟点 ? 1 : Math.max(1, Number(req.body.天数) || 1);
+  const 金额 = 读金额(req.body.金额);
+  if (金额 === null) return res.status(400).json({ 错误: '请填写房费金额' });
+  态.天数 = 天数; 态.金额 = 金额;
+  // 钟点房改时长：从「入住时刻」重算到点时间（不是从现在起算，否则每改一次就白送一段）
+  if (钟点 && req.body.时长小时 != null) {
+    态.时长小时 = Math.max(0.5, Number(req.body.时长小时) || 3);
+    态.预计退房 = 算预计退房(态.入住时间, 态.时长小时);
+  }
+  if (req.body.客人 != null) 态.客人 = String(req.body.客人).trim();
+  if (req.body.电话 != null) 态.电话 = String(req.body.电话).trim();
+  if (req.body.身份证 != null) 态.身份证 = String(req.body.身份证).trim();
+  if (req.body.备注 != null) 态.备注 = String(req.body.备注).trim();
+  记客人(态.客人, 态.身份证, 态.电话, 态.备注);
+  // 账单跟着金额走：改成 0 就把账单撤掉，从 0 改成正数就补记一条，否则原地改
+  let 账单 = 态.日租id != null ? data.daily.find(d => d.id === 态.日租id) : null;
+  let 提示 = '';
+  if (金额 > 0) {
+    if (账单) { 账单.入住天数 = 天数; 账单.金额 = 金额; 账单.客人 = 态.客人; 账单.身份证 = 态.身份证; }
+    else {
+      账单 = { id: 新id(data.daily), 日期: 态.入住日 || 营业日(), 房号: 态.房号, 客人: 态.客人, 身份证: 态.身份证, 入住天数: 天数, 金额 };
+      data.daily.push(账单);
+      态.日租id = 账单.id;
+      提示 = '已补记一条日租账单';
+    }
+  } else if (账单) {
+    data.daily = data.daily.filter(d => d.id !== 账单.id);
+    账单 = null; 态.日租id = null;
+    提示 = '房费改成 0，已撤掉那条日租账单';
+  }
+  写数据(data);
+  res.json({ ok: true, 房态: 态, 账单, 提示 });
+});
+// 退房：只把房间转「脏房」，钱在入住时已记进 daily，这里不动账
+app.post('/api/roomstatus/checkout', (req, res) => {
+  const data = 读数据();
+  const 态 = 取房态(data, String(req.body.房号 || '').trim());
+  if (!态 || 态.状态 !== '在住') return res.status(400).json({ 错误: '该房间当前没有在住客人' });
+  态.状态 = '脏房'; 态.退房时间 = new Date().toISOString();
+  写数据(data);
+  res.json({ ok: true, 房态: 态 });
+});
+// 撤销入住：录错了才用——删掉那条 daily 账单 + 房间退回空闲
+app.post('/api/roomstatus/undo-checkin', (req, res) => {
+  const data = 读数据();
+  const 态 = 取房态(data, String(req.body.房号 || '').trim());
+  if (!态 || 态.状态 === '空闲') return res.status(400).json({ 错误: '该房间没有可撤销的入住' });
+  const 删了 = 态.日租id != null && data.daily.some(d => d.id === 态.日租id);
+  if (删了) data.daily = data.daily.filter(d => d.id !== 态.日租id);
+  清空房态(态);
+  写数据(data);
+  res.json({ ok: true, 删除账单: 删了 });
+});
+// 确认清洁：脏房 → 空闲，并留一条清洁记录
+function 做清洁(data, 态) {
+  // 清洁记录仍然照记（数据留着，万一以后要查谁什么时候清的），只是界面上不再展示
+  const 记录 = { id: 新id(data.日租清洁记录), 房号: 态.房号, 时间: new Date().toISOString(), 上位客人: 态.客人 || '' };
+  data.日租清洁记录.push(记录);
+  清空房态(态, { 清洁时间: 记录.时间 });
+  return 记录;
+}
+app.post('/api/roomstatus/clean', (req, res) => {
+  const data = 读数据();
+  const 态 = 取房态(data, String(req.body.房号 || '').trim());
+  if (!态 || 态.状态 !== '脏房') return res.status(400).json({ 错误: '该房间不是脏房' });
+  const 记录 = 做清洁(data, 态);
+  写数据(data);
+  res.json({ ok: true, 记录 });
+});
+// 一键全清：所有脏房一次性标记清洁完毕
+app.post('/api/roomstatus/clean-all', (req, res) => {
+  const data = 读数据();
+  const 脏房 = data.日租房态.filter(x => x.状态 === '脏房' && 是日租房(data, x.房号));
+  脏房.forEach(态 => 做清洁(data, 态));
+  写数据(data);
+  res.json({ ok: true, 数量: 脏房.length, 房号: 脏房.map(x => x.房号) });
+});
+
 // 收支
 app.get('/api/transactions', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
@@ -782,9 +1107,11 @@ app.get('/api/update/check', async (req, res) => {
       有更新, 落后提交数, 领先提交数, 更新日志, 提交列表,
       工作区干净, 本地改动,
       可更新: 有更新 && 工作区干净 && 领先提交数 === 0,
+      // 分叉（本地领先 > 0 且远程有新版本）→ 允许一键强制同步到远程
+      可强制同步: 有更新 && 工作区干净 && 领先提交数 > 0,
       不可更新原因: !有更新 ? ''
         : !工作区干净 ? '检测到本地有未提交的改动，请先在开发机处理（commit / push 或撤销改动）后再更新'
-        : 领先提交数 > 0 ? `本地有 ${领先提交数} 个未推送的提交，与远程已分叉，只能快进更新的策略会失败。请先 push，或改在部署机上更新`
+        : 领先提交数 > 0 ? `本地有 ${领先提交数} 个未推送的提交，与远程已分叉。可点下方「强制同步到远程版本」丢弃本地这些提交、对齐远程最新版。`
         : ''
     });
   } catch (e) {
@@ -859,6 +1186,89 @@ app.post('/api/update/apply', async (req, res) => {
       更新前提交: 旧版本信息.提交, 更新后提交: 新版本信息.提交,
       更新前版本: 旧版本信息.版本, 更新后版本: 新版本信息.版本,
       备份文件: 备份文件名, 结果: '成功'
+    });
+    fs.writeFileSync(更新记录文件, JSON.stringify(记录列表.slice(0, 50), null, 2), 'utf8');
+    日志.push('🔄 正在重启服务...');
+
+    res.json({ ok: true, 旧版本: 旧版本信息.版本, 新版本: 新版本信息.版本, 需重启: true, 装了依赖, 备份文件: 备份文件名, 日志 });
+    触发重启();
+  } catch (e) {
+    更新中 = false;
+    res.status(400).json({ 错误: e.message, 日志 });
+  }
+});
+
+// 强制同步：本地与远程分叉（历史被 force push 改写）时，丢弃本地旧提交，直接对齐远程最新版。
+// 用于部署机本地残留旧历史（含旧密码等）的场景，不用再去命令行敲 git reset --hard。
+app.post('/api/update/force-sync', async (req, res) => {
+  if (更新中) return res.status(409).json({ 错误: '更新正在进行中，请稍候' });
+  更新中 = true;
+  const 日志 = [];
+  try {
+    try { await 跑命令('git', ['rev-parse', '--git-dir'], 5000); }
+    catch (e) { throw new Error('当前目录不是 git 仓库，无法强制同步'); }
+
+    // 工作区必须干净：reset --hard 会丢弃所有未提交改动，绝不能在有改动时执行
+    const 状态输出 = await 跑命令('git', ['-c', 'core.quotepath=false', 'status', '--porcelain']);
+    if (状态输出.trim()) throw new Error('检测到本地有未提交的改动，已拒绝强制同步。改动文件：' + 状态输出.split('\n').filter(Boolean).map(l => l.slice(3).trim()).join('、'));
+    日志.push('✅ 工作区干净');
+
+    // 确认确实分叉，否则不该走强制同步（正常更新走 apply 即可）
+    const 领先提交数 = Number(await 跑命令('git', ['rev-list', '--count', 'origin/main..HEAD'])) || 0;
+    if (领先提交数 === 0) throw new Error('本地与远程没有分叉，请直接用「立即更新」');
+    日志.push(`⚠️ 将丢弃本地 ${领先提交数} 个未推送的提交，强制对齐远程`);
+
+    const 旧版本信息 = { ...读版本() };
+
+    // 备份数据（失败直接中止，不允许跳过）
+    const 数据备份目录 = path.join(数据目录, '备份');
+    fs.mkdirSync(数据备份目录, { recursive: true });
+    const 时间戳 = new Date().toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
+    const 备份文件名 = `强制同步前_${时间戳}.json`;
+    if (fs.existsSync(数据文件)) {
+      fs.copyFileSync(数据文件, path.join(数据备份目录, 备份文件名));
+      清理旧备份(数据备份目录);
+      日志.push('✅ 已备份数据：' + 备份文件名);
+    } else {
+      日志.push('⏭ 数据文件不存在，跳过备份');
+    }
+
+    const pkg路径 = path.join(__dirname, 'package.json');
+    let 旧pkg内容 = ''; try { 旧pkg内容 = fs.readFileSync(pkg路径, 'utf8'); } catch (e) {}
+
+    // 拉最新 + 强制对齐（reset --hard 丢弃本地旧提交）
+    try {
+      await 跑命令('git', ['fetch', 'origin', 'main'], 60000);
+      await 跑命令('git', ['reset', '--hard', 'origin/main'], 20000);
+      日志.push('✅ 已强制同步到远程最新版');
+    } catch (e) {
+      throw new Error('强制同步失败：' + e.message);
+    }
+
+    let 装了依赖 = false;
+    let 新pkg内容 = ''; try { 新pkg内容 = fs.readFileSync(pkg路径, 'utf8'); } catch (e) {}
+    if (新pkg内容 && 新pkg内容 !== 旧pkg内容) {
+      try {
+        await 跑命令('npm', ['install', '--omit=dev'], 180000);
+        装了依赖 = true;
+        日志.push('✅ 依赖已更新（npm install）');
+      } catch (e) {
+        日志.push('⚠️ 代码已更新但依赖安装失败，请手动执行 npm install：' + e.message);
+      }
+    } else {
+      日志.push('⏭ 依赖无变化，跳过 npm install');
+    }
+
+    版本缓存 = null;
+    const 新版本信息 = 读版本();
+
+    const 更新记录文件 = path.join(数据目录, '更新记录.json');
+    let 记录列表 = []; try { 记录列表 = JSON.parse(fs.readFileSync(更新记录文件, 'utf8')); } catch (e) {}
+    记录列表.unshift({
+      时间: new Date().toLocaleString('zh-CN'),
+      更新前提交: 旧版本信息.提交, 更新后提交: 新版本信息.提交,
+      更新前版本: 旧版本信息.版本, 更新后版本: 新版本信息.版本,
+      备份文件: 备份文件名, 结果: '强制同步'
     });
     fs.writeFileSync(更新记录文件, JSON.stringify(记录列表.slice(0, 50), null, 2), 'utf8');
     日志.push('🔄 正在重启服务...');
