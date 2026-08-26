@@ -1,0 +1,9 @@
+# 依赖包(部署时会自动 npm install,不需要上传)
+node_modules/
+
+# 业务数据目录：整个 data/ 一律不推送（数据.json、登录凭据.json、备份、项目备忘、方案文档等）
+data/
+
+# 系统/编辑器杂项文件
+.DS_Store
+*.log

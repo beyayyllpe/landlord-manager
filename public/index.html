@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>租房管家</title>
+  <link rel="stylesheet" href="style.css?v=__版本__">
+</head>
+<body>
+  <header class="顶栏">
+    <div class="顶栏左">
+      <span class="logo">🏠</span>
+      <h1>租房管家</h1>
+      <span class="月份显示" id="月份显示"></span>
+    </div>
+    <nav class="导航" id="导航">
+      <button data-page="总览" class="激活">总览</button>
+      <button data-page="房间">房间档案</button>
+      <button data-page="抄表">水电抄表</button>
+      <button data-page="账单">租客账单</button>
+      <button data-page="月租">月租</button>
+      <button data-page="日租">日租</button>
+      <button data-page="退房">退房</button>
+      <button data-page="收支">支出</button>
+      <button data-page="月度账单">账单</button>
+      <button data-page="设置">设置</button>
+    </nav>
+  </header>
+
+  <main id="内容"></main>
+
+  <div class="提示" id="提示"></div>
+
+  <script src="app.js?v=__版本__"></script>
+</body>
+</html>
