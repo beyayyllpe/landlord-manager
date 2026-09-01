@@ -90,7 +90,7 @@ function 清理旧备份(目录, 保留 = 20) {
 
 // ----------密码---------
 // 登录凭据单独存 data/登录凭据.json（加盐 scrypt 哈希，不存明文），理由：
-//   1. 不混进 /api/export 的备份包（备份只导数据.json），导入备份也不会把密码冲掉
+//   1. 不混进 数据.json（与账目数据分离）；完整备份导出/导入时会一并带上
 //   2. .gitignore 的 data/*.json 已覆盖，不会误提交到仓库
 // 首次运行：凭据文件不存在时随机生成密码并打印（代码里不写死明文密码，开源安全）
 const 默认用户名 = 'admin';
@@ -168,7 +168,7 @@ const basicAuth = require('express-basic-auth');
 app.use(basicAuth({ authorizer: 校验凭据, challenge: true }));
 // -----------密码---------
 
-app.use(express.json());
+app.use(express.json({ limit: '20mb' })); // 备份/导入时完整备份可能超 100kb 默认限制，放大到 20mb
 
 // 首页动态注入版本号：把 index.html 里的 __版本__ 占位符替换成当前 commit 短哈希
 // 必须放在 express.static 之前，才能拦下 GET / 这个精确路径（已知坑 12 的永久解决方案）
@@ -279,10 +279,13 @@ function 读数据() {
   try {
     if (!fs.existsSync(数据文件)) { const 初始 = 空数据(); fs.mkdirSync(数据目录, { recursive: true }); fs.writeFileSync(数据文件, JSON.stringify(初始, null, 2), 'utf8'); return 初始; }
     const 原始 = JSON.parse(fs.readFileSync(数据文件, 'utf8'));
-    const 需写回 = !Array.isArray(原始.房源); // 迁移会就地修改对象，须在迁移前判断
-    const data = 迁移(原始);
-    // 首次迁移（磁盘还没有房源表）时立即写回，把新结构持久化
-    if (需写回) 写数据(data);
+    // 防护：数据文件若被误写成「完整备份」外壳（顶层是 类型/数据 字段），自动拆出「数据」部分，避免读成空
+    const 是外壳 = 原始 && 原始.类型 === '租房管家完整备份' && 原始.数据 && typeof 原始.数据 === 'object';
+    const 有效 = 是外壳 ? 原始.数据 : 原始;
+    const 需写回 = !Array.isArray(有效.房源); // 迁移会就地修改对象，须在迁移前判断
+    const data = 迁移(有效);
+    // 首次迁移（磁盘还没有房源表）或拆出了外壳时，立即写回纯数据、持久化
+    if (需写回 || 是外壳) 写数据(data);
     return data;
   } catch (e) { console.error('读取数据失败：', e.message); return 空数据(); }
 }
@@ -340,31 +343,32 @@ function 生成账单(data, 房, 月份) {
   const 交租日期 = 交租日值 ? `${月份}-${String(交租日值).padStart(2, '0')}` : '';
   const 房间损耗 = Number(记录.房间损耗) || 0;
   const 损耗说明 = 记录.损耗说明 || '';
-  const 补缴 = Number(记录.补缴) || 0; // 本月补收上月欠款（抵消结转，不进本月欠款）
-  const 结转 = Number(记录.结转) || 0; // 上月转入本月的拖欠
+  const 补缴 = Number(记录.补缴) || 0; // 本月补收上月欠款（追缴），直接冲减结转
+  const 结转 = Number(记录.结转) || 0; // 上月转入本月的拖欠（原值）
+  const 结转剩余 = Math.max(0, 结转 - 补缴); // 追缴冲减后的剩余结转，直接并入应付
   const 转下月 = Number(记录.转下月) || 0; // 本月已结转下月的拖欠（转出后本月状态=欠费）
   // 可计算 = 本月已抄表，或当月新租（当月新租水电尚无跨月用量，按 0 计即可正常核收房租+管理费）
   const 可计算 = (水电.本月水底 !== null && 水电.本月电底 !== null) || 当月新租;
-  // 应付 = 上月欠费滚存（结转）+ 本月房租/管理费/水电/损耗（预缴免租期房租/管理费按 0）
-  const 应付租金 = 可计算 ? 舍入(房租实际 + 管理费实际 + 水电.水费 + 水电.电费 + 房间损耗 + 结转) : null;
+  // 应付 = 剩余结转（上月欠款扣掉已追缴）+ 本月房租/管理费/水电/损耗（预缴免租期房租/管理费按 0）
+  const 应付租金 = 可计算 ? 舍入(房租实际 + 管理费实际 + 水电.水费 + 水电.电费 + 房间损耗 + 结转剩余) : null;
   const 实收 = Number(记录.实收) || 0; // 本月核收实收
   const 强制 = 记录.强制 === true;
   const 平账 = 记录.平账 === true;
   let 状态, 欠款额;
   if (!可计算) {
-    // 未抄表算不出本月费用；但上月欠费滚存转入（结转）仍要显示成「欠款」，金额 = 结转 − 已核收 − 已追缴。
+    // 未抄表算不出本月费用；但剩余结转仍要显示成「欠款」，金额 = 结转剩余 − 已核收。
     // 已核收/平账（收清结转欠款）照常标记「已核收」，从状态页消失。
     if (强制 || 平账) { 状态 = '已核收'; 欠款额 = 0; }
-    else if (结转 > 0) { 状态 = '欠款'; 欠款额 = 舍入(Math.max(0, 结转 - 实收 - 补缴)); }
+    else if (结转剩余 > 0) { 状态 = '欠款'; 欠款额 = 舍入(Math.max(0, 结转剩余 - 实收)); }
     else { 状态 = '未交'; 欠款额 = 0; }
   }
   else if (强制 || 平账) { 状态 = '已核收'; 欠款额 = 0; }
   else if (转下月 > 0) { 状态 = '欠款'; 欠款额 = 转下月; } // 已欠费滚存：欠费金额 = 滚存金额
-  else if (实收 > 0 || 补缴 > 0) { 状态 = '欠款'; 欠款额 = 舍入(应付租金 - 实收 - 补缴); } // 欠费 = 应付 − 核收实收 − 补缴
+  else if (结转剩余 > 0 || 实收 > 0 || 补缴 > 0) { 状态 = '欠款'; 欠款额 = 舍入(应付租金 - 实收); } // 欠费 = 应付 − 核收实收（应付已含剩余结转，追缴已冲减）
   else { 状态 = '未交'; 欠款额 = 0; }
   return {
     房号: 房.房号, 租客: 房.租客姓名 || '', 交租日: 交租日值, 交租日期, 房间备注: 房.备注 || '',
-    房租: 房租展示, 新收押金, 管理费: 管理费展示, 水费: 水电.水费, 电费: 水电.电费, 房间损耗, 损耗说明, 补缴, 结转, 转下月, 预缴, 应付租金,
+    房租: 房租展示, 新收押金, 管理费: 管理费展示, 水费: 水电.水费, 电费: 水电.电费, 房间损耗, 损耗说明, 补缴, 结转: 结转剩余, 转下月, 预缴, 应付租金,
     水费单价: 房水价(data, 房), 电费单价: 房电价(data, 房),
     上月水底: 水电.上月水底, 本月水底: 水电.本月水底, 用水量: 水电.用水量,
     上月电底: 水电.上月电底, 本月电底: 水电.本月电底, 用电量: 水电.用电量,
@@ -522,8 +526,9 @@ app.post('/api/checkout', (req, res) => {
   const 用电量 = Math.max(0, (Number(退房电底) || 0) - (Number(上月电底) || 0));
   const 水费 = 舍入(用水量 * 水价), 电费 = 舍入(用电量 * 电价), 水电总额 = 舍入(水费 + 电费);
   const 卫生费 = Number(退房卫生费) || 0, 损耗 = Number(房间损耗) || 0;
-  // 退还金额 = 押金 + 房卡押金 + 留存金额 − 水电费 − 卫生费 − 损耗费
-  const 退入金额 = 舍入(押金额 + 房卡押金额 + 留存 - 水电总额 - 卫生费 - 损耗);
+  // 退还金额 = 押金 + 房卡押金 + 留存金额 − 水电费 − 卫生费 − 损耗费。
+  // 四舍五入取整：实际退钱是整数元，取整后流水、结算单、支出统计三处一致，否则水电小数会带出「合计差 1」。
+  const 退入金额 = Math.round(押金额 + 房卡押金额 + 留存 - 水电总额 - 卫生费 - 损耗);
   const 记录 = { id: 新id(data.退房记录), 日期: 日期 || 今天(), 房号, 租客: 房.租客姓名 || '', 电话: 电话 || 房.电话 || '', 身份证: 身份证 || 房.身份证 || '', 押金: 押金额, 房卡押金: 房卡押金额, 上月水底: 上月水底 || '', 上月电底: 上月电底 || '', 退房水底: 退房水底 || '', 退房电底: 退房电底 || '', 水费单价: 水价, 电费单价: 电价, 用水量, 用电量, 水费, 电费, 水电总额, 退房卫生费: 卫生费, 房间损耗: 损耗, 损耗说明: 损耗说明 || '', 留存金额: 留存, 退入金额, 备注: 备注 || '', 房间快照: 房 };
   data.退房记录.push(记录);
   // 只有实退 > 0 才补支出流水（退房退还）；≤ 0 说明没实际退钱，不进支出列表、也不存流水 id
@@ -704,8 +709,8 @@ app.post('/api/bills/carry', (req, res) => {
   if (!房) return res.status(404).json({ 错误: '房间不存在' });
   const 本月账单 = 生成账单(data, 房, 月份);
   if (本月账单.应付租金 == null) return res.status(400).json({ 错误: '本月账单未抄表无法计算，不能欠费滚存' });
-  // 拖欠 = 应付 − 核收实收 − 补缴 − 已转下月（补缴算进实收，不重复）
-  const 拖欠 = 舍入((本月账单.应付租金 || 0) - (本月账单.实收 || 0) - (本月账单.补缴 || 0) - (本月账单.转下月 || 0));
+  // 拖欠 = 应付 − 核收实收 − 已转下月（应付已含剩余结转，追缴/补缴已冲减，不再重复减）
+  const 拖欠 = 舍入((本月账单.应付租金 || 0) - (本月账单.实收 || 0) - (本月账单.转下月 || 0));
   const 结转金额 = 金额 !== undefined ? Number(金额) || 0 : 拖欠;
   if (结转金额 <= 0) return res.status(400).json({ 错误: '滚存金额需大于 0' });
   // 本月记录：标记已转下月（累加），让本月状态显示「欠费」
@@ -722,13 +727,26 @@ app.post('/api/bills/carry', (req, res) => {
   写数据(data);
   res.json({ 房号, 月份, 下月, 结转金额, 结转: 下月记录.结转, 转下月: 本月记录.转下月 });
 });
-// 删除某房某月的账单记录
+// 删除某房某月的账单记录：保留「结转」（上月滚存欠款），只清空本月的操作字段（追缴/核收/滚存/损耗）
 app.delete('/api/bills', (req, res) => {
   const data = 读数据();
   const { 房号, 月份 } = req.query;
-  data.bills = data.bills.filter(b => !(b.房号 === 房号 && b.月份 === 月份));
+  const 记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
+  if (!记录) return res.json({ ok: true });
+  // 本月若滚存过（转下月 > 0），下月的结转要同步减掉，否则删了本月、下月还凭空多一笔
+  const 转下月 = Number(记录.转下月) || 0;
+  if (转下月 > 0) {
+    const 下月记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 加月(月份, 1));
+    if (下月记录) 下月记录.结转 = 舍入(Math.max(0, (Number(下月记录.结转) || 0) - 转下月));
+  }
+  if ((Number(记录.结转) || 0) > 0) {
+    // 有上月结转：保留结转，只清空本月的操作字段
+    Object.assign(记录, { 补缴: 0, 实收: 0, 强制: false, 平账: false, 房间损耗: 0, 损耗说明: '', 收款日期: '', 转下月: 0 });
+  } else {
+    data.bills = data.bills.filter(b => !(b.房号 === 房号 && b.月份 === 月份));
+  }
   写数据(data);
-  res.json({ ok: true });
+  res.json({ ok: true, 保留结转: (Number(记录.结转) || 0) > 0 });
 });
 
 // 日租
@@ -1045,6 +1063,42 @@ function 离租房已收(data, 月份) {
   return 合计;
 }
 
+// 某月月租已收 = 在租房的实收 + 补缴 + 新收押金 + 预缴 + 离租房的实收/补缴。
+// 与 /api/summary、/api/settle 共用，保证「全部账单」「总账单」「固化」三处口径一致、实时联动。
+function 算月已收(data, 月份) {
+  let 月租已收 = 0;
+  for (const 房 of data.rooms) {
+    const 账单 = 生成账单(data, 房, 月份);
+    月租已收 += 账单.实收 + (账单.补缴 || 0) + (账单.新收押金 || 0) + (账单.预缴 || 0);
+  }
+  月租已收 += 离租房已收(data, 月份);
+  return 舍入(月租已收);
+}
+
+// 「全部账单」数据：历史总账单里 8 月之前是写死导入的历史数据（bills/daily/transactions 里没有它们），
+// 保持原值不动；只有有实时数据（bills/daily/transactions 出现过的月份）才用实时值覆盖，改历史数据后自动联动。
+app.get('/api/history', (req, res) => {
+  const data = 读数据();
+  const 实时月 = new Set();
+  for (const b of data.bills) if (b.月份) 实时月.add(b.月份);
+  for (const d of data.daily) if (d.日期) 实时月.add(String(d.日期).slice(0, 7));
+  for (const t of data.transactions) if (t.日期) 实时月.add(String(t.日期).slice(0, 7));
+  res.json((data.历史总账单 || []).map(h => {
+    const 实时 = 实时月.has(h.月份);
+    // 支出：写死月份（2024-03 起）的支出字段里含了工资 4000，要减出来；实时月份（8 月起）的支出来自流水、本就不含工资，不减
+    const 支出原始 = 实时
+      ? 舍入(data.transactions.filter(t => (t.日期 || '').startsWith(h.月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0))
+      : (h.支出 || 0) - (h.月份 >= '2024-03' ? 4000 : 0);
+    return {
+      月份: h.月份,
+      月租总收: 实时 ? 算月已收(data, h.月份) : (h.月租 || 0),
+      日租总收: 实时 ? 舍入(data.daily.filter(d => (d.日期 || '').startsWith(h.月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0)) : (h.日租 || 0),
+      支出原始,
+      工资: 月工资(data.settings, h.月份)
+    };
+  }).sort((a, b) => a.月份.localeCompare(b.月份)));
+});
+
 // 总览
 app.get('/api/summary', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
@@ -1061,13 +1115,11 @@ app.get('/api/summary', (req, res) => {
     const 缺 = 缺项(房);
     if (缺.length) 数据不齐.push({ 房号: 房.房号, 缺失: 缺 });
     const 账单 = 生成账单(data, 房, 月份);
-    // 月租已收 = 所有在租房的实收 + 补缴 + 新收押金 + 预缴（与月租账单页「已收」口径一致，不限核收状态、含缺项房）
-    月租已收 += 账单.实收 + (账单.补缴 || 0) + (账单.新收押金 || 0) + (账单.预缴 || 0);
     // 状态模块只列「已抄表」或「上月有欠费转入」的未交/欠款房，纯未抄表（无结转）不在总览列
     if (!缺.length && (账单.状态 === '未交' || 账单.状态 === '欠款') && (账单.可计算 || 账单.结转 > 0)) 欠费.push(账单);
   }
-  // 退房后房间已从 rooms 移除，但当月已核收/追缴的钱不能跟着消失（用户要求退房不影响核/追缴金额）
-  月租已收 += 离租房已收(data, 月份);
+  // 月租已收 = 算月已收（含离租房的实收/补缴），与「全部账单」「固化」口径一致
+  月租已收 = 算月已收(data, 月份);
   const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
   const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
   const 工资 = 月工资(data.settings, 月份); // 工资：按「设置 → 数据 → 工资变量」的分段计算
@@ -1091,13 +1143,7 @@ app.post('/api/vacant/toggle', (req, res) => {
 app.post('/api/settle', (req, res) => {
   const data = 读数据();
   const 月份 = req.body.月份 || data.settings.当前月份;
-  let 月租已收 = 0;
-  for (const 房 of data.rooms) {
-    const 账单 = 生成账单(data, 房, 月份);
-    月租已收 += 账单.实收 + (账单.补缴 || 0) + (账单.新收押金 || 0) + (账单.预缴 || 0);
-  }
-  // 切月固化时同样补上已离租房的核收/追缴，口径与 /api/summary 一致
-  月租已收 += 离租房已收(data, 月份);
+  const 月租已收 = 算月已收(data, 月份);
   const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
   const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
   let 记录 = data.历史总账单.find(h => h.月份 === 月份);
@@ -1107,24 +1153,57 @@ app.post('/api/settle', (req, res) => {
   res.json(记录);
 });
 
-// 导出数据备份（下载完整数据.json）
+// 导出完整备份：把 数据.json + 登录凭据.json + 客人档案.json 合并成一个文件（带类型标记，导入时自动拆回三份）
 app.get('/api/export', (req, res) => {
-  const data = 读数据();
-  const 日期 = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="rental-backup-${日期}.json"`);
-  res.send(JSON.stringify(data, null, 2));
+  try {
+    const 数据 = 读数据();
+    // 登录凭据、客人档案可能不存在（没设密码 / 没存过档案），缺失时置 null/[]，不导出空壳
+    let 登录凭据 = null;
+    try { if (fs.existsSync(凭据文件)) 登录凭据 = JSON.parse(fs.readFileSync(凭据文件, 'utf8')); } catch (e) {}
+    const 客人档案 = 读客人档案();
+    const b = 北京();
+    const 时间戳 = `${b.getUTCFullYear()}${补零(b.getUTCMonth() + 1)}${补零(b.getUTCDate())}_${补零(b.getUTCHours())}${补零(b.getUTCMinutes())}${补零(b.getUTCSeconds())}`;
+    const 备份 = {
+      类型: '租房管家完整备份',
+      版本: '1',
+      导出时间: `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())} ${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}:${补零(b.getUTCSeconds())}`,
+      数据, 登录凭据, 客人档案,
+    };
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    // 文件名用英文（坑 5：HTTP 响应头文件名用中文会报 Invalid character）
+    res.setHeader('Content-Disposition', `attachment; filename="rental-full-backup-${时间戳}.json"`);
+    res.send(JSON.stringify(备份, null, 2));
+  } catch (e) {
+    res.status(500).json({ 错误: '导出失败：' + e.message });
+  }
 });
-// 导入数据备份（上传数据.json 覆盖当前数据）
+// 导入备份：支持「完整备份」（数据 + 登录凭据 + 客人档案，自动拆回三份），也兼容旧的纯「数据.json」
 app.post('/api/import', (req, res) => {
   try {
-    const 数据 = req.body;
-    if (!数据 || typeof 数据 !== 'object' || !Array.isArray(数据.rooms)) {
-      return res.status(400).json({ 错误: '数据格式不正确，请上传有效的「数据.json」备份文件' });
+    const 上传 = req.body;
+    if (!上传 || typeof 上传 !== 'object') {
+      return res.status(400).json({ 错误: '数据格式不正确，请上传有效的备份文件' });
     }
-    迁移(数据); // 字段兼容处理
-    写数据(数据);
-    res.json({ ok: true });
+    if (上传.类型 === '租房管家完整备份') {
+      if (!上传.数据 || typeof 上传.数据 !== 'object' || !Array.isArray(上传.数据.rooms)) {
+        return res.status(400).json({ 错误: '备份里的「数据」不完整，无法导入' });
+      }
+      迁移(上传.数据);
+      写数据(上传.数据);
+      if (上传.登录凭据 && typeof 上传.登录凭据 === 'object' && 上传.登录凭据.哈希) {
+        const 临时 = 凭据文件 + '.tmp';
+        fs.writeFileSync(临时, JSON.stringify(上传.登录凭据, null, 2), 'utf8'); fs.renameSync(临时, 凭据文件);
+      }
+      if (Array.isArray(上传.客人档案)) 写客人档案(上传.客人档案);
+      res.json({ ok: true, 完整: true });
+    } else if (Array.isArray(上传.rooms)) {
+      // 旧格式：纯数据.json，只覆盖数据，不动登录凭据和客人档案（向后兼容旧备份）
+      迁移(上传);
+      写数据(上传);
+      res.json({ ok: true, 完整: false });
+    } else {
+      return res.status(400).json({ 错误: '数据格式不正确，请上传有效的备份文件' });
+    }
   } catch (e) {
     res.status(400).json({ 错误: '导入失败：' + e.message });
   }

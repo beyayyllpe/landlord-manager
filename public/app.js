@@ -373,7 +373,6 @@ window.确认欠费滚存 = async function(房号) {
   if (r.错误) { 提示(r.错误); return; }
   提示('已欠费滚存'); 关闭模态(); 渲染();
 };
-
 // ============ 备忘录（总览卡片，全局常驻不分月份） ============
 let 备忘缓存 = [];            // 本地缓存，勾选/切模式时直接重绘，不用每次都请求后端
 let 备忘删除模式 = false;      // 默认关闭：平时不显示删除图标，防手机误触
@@ -930,24 +929,16 @@ let 账单月份筛选 = ''; let 账单盈亏筛选 = '全部'; let 账单排序
 window.显示全部账单 = async function() {
   const el = document.getElementById('账单tab内容');
   el.innerHTML = '<div class="空">加载中…</div>';
-  const 全部 = await api('/api/all');
-  // 工资按「设置 → 数据 → 工资变量」的分段计算（与后端 /api/summary 同一算法，口径一致）
-  const 分段 = (全部.settings.工资分段 || []).filter(x => x && x.起始月份).sort((a, b) => String(a.起始月份).localeCompare(String(b.起始月份)));
-  const 月工资 = m => { const 命中 = 分段.filter(x => String(x.起始月份) <= m); return 命中.length ? Number(命中[命中.length - 1].金额) || 0 : 0; };
-  // 房租支出：每半年 150000（2023-03~2026-08）月摊 25000，2026-09 起每半年 110000 月摊 18333
-  const 半年第几月 = m => { const 月 = Number(m.slice(5, 7)); return (月 >= 3 && 月 <= 8) ? 月 - 2 : (月 >= 9 ? 月 - 8 : 月 + 4); };
+  // 实时历史汇总：改历史数据后自动联动（后端 /api/history 按 summary 同一口径现算，不再读切月固化的快照）
+  const 结果 = await api('/api/history');
   // 房租支出：每半年 150000（2023-03~2026-08）月摊 25000；2026-09 起每半年 110000，前 5 月各 18333、第 6 月 18335 补齐差额
+  const 半年第几月 = m => { const 月 = Number(m.slice(5, 7)); return (月 >= 3 && 月 <= 8) ? 月 - 2 : (月 >= 9 ? 月 - 8 : 月 + 4); };
   const 月房租 = m => m >= '2026-09' ? (半年第几月(m) <= 5 ? 18333 : 18335) : (m >= '2023-03' ? 25000 : 0);
-  // 只汇总历史总账单（当月不记录，切月后固化进历史才显示）
-  const 结果 = (全部.历史总账单 || []).map(h => ({ 月份: h.月份, 月租总收: h.月租, 日租总收: h.日租, 支出原始: h.支出 })).sort((a, b) => a.月份.localeCompare(b.月份));
-  // 计算财务指标
   for (const r of 结果) {
-    r.工资 = 月工资(r.月份);
-    // 业务规则：支出列从 2024-03 起每月减 4000（把工资从支出里减出来），工资列仍照扣 4000
-    r.支出 = (r.支出原始 || 0) - (r.月份 >= '2024-03' ? 4000 : 0);
+    r.支出 = r.支出原始 || 0; // 支出（写死月已在后端减掉工资 4000，实时月为流水真实支出）
+    r.利润 = (r.月租总收 || 0) + (r.日租总收 || 0) - r.支出 - (r.工资 || 0); // 利润（毛利）= 月租 + 日租 − 支出 − 工资
     r.房租支出 = 月房租(r.月份);
-    r.利润 = (r.月租总收 || 0) + (r.日租总收 || 0) - r.支出 - r.工资; // 利润 = 收入 − 支出 − 工资（不含房租支出）
-    r.净利润 = r.利润 - r.房租支出;
+    r.净利润 = r.利润 - r.房租支出; // 净利润（纯利润）= 利润 − 房租支出
   }
   window.全部账单数据 = 结果;
   el.innerHTML = `<div class="卡片" id="全部账单透视区"></div>
@@ -986,7 +977,7 @@ window.渲染全部账单表 = function() {
   const 表区 = document.getElementById('全部账单表区');
   if (表区) {
     表区.innerHTML = `<div class="表格容器"><table class="斑马">
-      <tr><th>月份</th><th class="数字">月租总收</th><th class="数字">日租总收</th><th class="数字">支出(减工资)</th><th class="数字">工资</th><th class="数字">利润</th><th class="数字">房租支出</th><th class="数字">净利润</th></tr>
+      <tr><th>月份</th><th class="数字">月租总收</th><th class="数字">日租总收</th><th class="数字">支出</th><th class="数字">工资</th><th class="数字">利润</th><th class="数字">房租支出</th><th class="数字">净利润</th></tr>
       ${列表.map(r => `<tr><td><b>${r.月份}</b></td><td class="数字">¥${数字(r.月租总收)}</td><td class="数字">¥${数字(r.日租总收)}</td><td class="数字">¥${数字(r.支出)}</td><td class="数字">¥${数字(r.工资)}</td><td class="数字">¥${数字(r.利润)}</td><td class="数字">¥${数字(r.房租支出)}</td><td class="数字">¥${数字(r.净利润)}</td></tr>`).join('')}
       ${列表.length?'':'<tr><td colspan="8" class="空">无匹配数据</td></tr>'}
     </table></div>`;
@@ -1011,9 +1002,9 @@ window.选日租日 = function(值) {
   渲染();
 };
 window.删除账单 = async function(房号, 月份) {
-  if (!confirm(`确定删除 ${房号} ${月份} 的账单记录？`)) return;
-  await api(`/api/bills?房号=${房号}&月份=${月份}`, { method: 'DELETE' });
-  提示('已删除'); 渲染();
+  if (!confirm(`确定删除 ${房号} ${月份} 的账单记录？\n若有上月结转欠款，会保留结转、只清空本月操作（追缴/核收/滚存/损耗）。`)) return;
+  const r = await api(`/api/bills?房号=${房号}&月份=${月份}`, { method: 'DELETE' });
+  提示(r.保留结转 ? '已清空本月操作（保留上月结转）' : '已删除'); 渲染();
 };
 async function 渲染月度账单明细(el) {
   const 月 = 汇总月份;
@@ -1490,8 +1481,8 @@ window.打开退房详情 = function(id) {
   const 数 = v => Number(v) || 0;
   const 应收 = 数(r.押金) + 数(r.房卡押金) + 数(r.留存金额);
   const 应扣 = 数(r.水电总额) + 数(r.退房卫生费) + 数(r.房间损耗);
-  const 应退还 = Math.round((应收 - 应扣) * 100) / 100;
-  const 对不上 = Math.abs(应退还 - 数(r.退入金额)) > 0.01; // 旧版本漏减水电写下的老记录会在这里露馅
+  const 应退还 = Math.round(应收 - 应扣); // 与后端退入金额取整一致
+  const 对不上 = Math.abs(应退还 - 数(r.退入金额)) > 0.5; // 旧版本漏减水电写下的老记录会在这里露馅（取整后按整数比较）
   // 单据行：说明走小字副行；水电底度并进说明里，不再单列一张明细表（原版和「应扣款项」两处重复）
   const 行 = (标签, 值, 说明) => `<tr><td>${标签}${说明 ? `<div class="退租说明">${转义(说明)}</div>` : ''}</td><td class="数字">${值}</td></tr>`;
   const 抄表说明 = (上, 退, 量, 单位, 单价) => `${上 || '—'} → ${退 || '—'}　用 ${量} ${单位} × ${单价} 元`;
@@ -1803,7 +1794,7 @@ function 设置_导出() {
   return `
     <div class="卡片">
       <h2>📦 数据备份 / 迁移</h2>
-      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">导出：下载一份完整数据备份（含所有房客、账单、抄表、退房、历史账单、备忘录）；导入：上传备份文件覆盖当前数据（用于换设备、迁移到线上服务器）。登录密码不在备份里，不会被覆盖。</p>
+      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">导出：下载一份完整备份（数据 + 登录密码 + 客人档案，合并成一个文件）；导入：上传该备份即可一键恢复全部（用于换设备、迁移）。备份里含登录密码哈希，请妥善保管。</p>
       <div class="工具栏">
         <a class="btn" href="/api/export" download>导出数据备份</a>
         <input type="file" id="导入文件" accept=".json,application/json" style="display:none" onchange="导入数据(this.files[0])">
