@@ -193,10 +193,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
-function 当前月份() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function 当前月份() { return 北京日期().slice(0, 7); }
 // 工资分段默认值：2024-03 起每月 4000（与历史口径一致，改动只影响之后新增的分段）
 function 默认工资分段() { return [{ 起始月份: '2024-03', 金额: 4000 }]; }
-function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段() }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
+function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段(), 钟点房默认价: 60, 空置脏房: [] }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
 // 某月工资 = 起始月份 ≤ 该月 的分段里，起始月份最大的那条；都不满足则 0；未来月份（没到当月）不发工资
 function 月工资(settings, 月份) {
   if (String(月份) > 当前月份()) return 0;
@@ -302,10 +302,14 @@ function 算水电(data, 房号, 月份) {
   const 全部 = data.meters.filter(m => m.房号 === 房号).sort((a, b) => (a.日期 || '').localeCompare(b.日期 || ''));
   const 之前 = 全部.filter(m => (m.日期 || '') < (月份 + '-01'));
   const 本月 = 全部.filter(m => (m.日期 || '').startsWith(月份));
-  const 上月水底 = 之前.length ? Number(之前[之前.length - 1].水表) : Number(房.水表底度) || 0;
-  const 上月电底 = 之前.length ? Number(之前[之前.length - 1].电表) : Number(房.电表底度) || 0;
-  const 本月水底 = 本月.length ? Number(本月[本月.length - 1].水表) : null;
-  const 本月电底 = 本月.length ? Number(本月[本月.length - 1].电表) : null;
+  const 本月最后 = 本月[本月.length - 1];
+  // 上月底度：优先用本月抄表记录里手工填的覆盖值（水电抄表页允许改上月底度），否则回退到上一期读数 / 房间底度
+  const 覆盖水 = 本月最后 && 本月最后.上月水表 !== undefined && 本月最后.上月水表 !== null && String(本月最后.上月水表) !== '';
+  const 覆盖电 = 本月最后 && 本月最后.上月电表 !== undefined && 本月最后.上月电表 !== null && String(本月最后.上月电表) !== '';
+  const 上月水底 = 覆盖水 ? Number(本月最后.上月水表) : (之前.length ? Number(之前[之前.length - 1].水表) : Number(房.水表底度) || 0);
+  const 上月电底 = 覆盖电 ? Number(本月最后.上月电表) : (之前.length ? Number(之前[之前.length - 1].电表) : Number(房.电表底度) || 0);
+  const 本月水底 = 本月最后 ? Number(本月最后.水表) : null;
+  const 本月电底 = 本月最后 ? Number(本月最后.电表) : null;
   const 用水量 = 本月水底 !== null && 本月水底 >= 上月水底 ? 本月水底 - 上月水底 : 0;
   const 用电量 = 本月电底 !== null && 本月电底 >= 上月电底 ? 本月电底 - 上月电底 : 0;
   return { 上月水底, 本月水底, 用水量, 水费: 舍入(用水量 * 房水价(data, 房)), 上月电底, 本月电底, 用电量, 电费: 舍入(用电量 * 房电价(data, 房)) };
@@ -347,7 +351,13 @@ function 生成账单(data, 房, 月份) {
   const 强制 = 记录.强制 === true;
   const 平账 = 记录.平账 === true;
   let 状态, 欠款额;
-  if (!可计算) { 状态 = '未交'; 欠款额 = 0; }
+  if (!可计算) {
+    // 未抄表算不出本月费用；但上月欠费滚存转入（结转）仍要显示成「欠款」，金额 = 结转 − 已核收 − 已追缴。
+    // 已核收/平账（收清结转欠款）照常标记「已核收」，从状态页消失。
+    if (强制 || 平账) { 状态 = '已核收'; 欠款额 = 0; }
+    else if (结转 > 0) { 状态 = '欠款'; 欠款额 = 舍入(Math.max(0, 结转 - 实收 - 补缴)); }
+    else { 状态 = '未交'; 欠款额 = 0; }
+  }
   else if (强制 || 平账) { 状态 = '已核收'; 欠款额 = 0; }
   else if (转下月 > 0) { 状态 = '欠款'; 欠款额 = 转下月; } // 已欠费滚存：欠费金额 = 滚存金额
   else if (实收 > 0 || 补缴 > 0) { 状态 = '欠款'; 欠款额 = 舍入(应付租金 - 实收 - 补缴); } // 欠费 = 应付 − 核收实收 − 补缴
@@ -379,6 +389,12 @@ app.post('/api/settings', (req, res) => {
     if (!(值 > 0)) return res.status(400).json({ 错误: `${键}必须是大于 0 的数字` });
     补丁[键] = 值;
   }
+  // 钟点房默认价：办入住选钟点房时自动带出的房费，同样必须大于 0，防存成空串退化成 0
+  if ('钟点房默认价' in 补丁) {
+    const 值 = Number(补丁['钟点房默认价']);
+    if (!(值 > 0)) return res.status(400).json({ 错误: '钟点房默认价必须是大于 0 的数字' });
+    补丁['钟点房默认价'] = 值;
+  }
   Object.assign(data.settings, 补丁);
   写数据(data); res.json(data.settings);
 });
@@ -398,6 +414,16 @@ app.post('/api/password', (req, res) => {
   if (确认密码 != null && String(确认密码) !== 密码) return res.status(400).json({ 错误: '两次输入的新密码不一致' });
   写凭据(造凭据(用户名, 密码));
   res.json({ ok: true, 用户名 });
+});
+
+// 授时：前端拿它校准自己的时钟（手机/电脑时间设错了也不影响记账），每 6 小时校一次
+app.get('/api/now', (req, res) => {
+  const b = 北京();
+  res.json({
+    时间戳: Date.now(),
+    北京时间: `${北京日期()} ${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}`,
+    营业日: 营业日()
+  });
 });
 
 // 客人档案：带 name 查这个人（用于自动填身份证/电话），不带 name 回姓名清单（给输入框做建议）
@@ -483,7 +509,7 @@ app.delete('/api/houses/:id', (req, res) => {
 // 退房：记录退房信息 + 清空房间租客
 app.post('/api/checkout', (req, res) => {
   const data = 读数据();
-  const { 房号, 日期, 上月水底, 上月电底, 退房水底, 退房电底, 退房卫生费, 房间损耗, 损耗说明, 退押金, 退房卡押金, 留存金额, 电话, 身份证 } = req.body;
+  const { 房号, 日期, 上月水底, 上月电底, 退房水底, 退房电底, 退房卫生费, 房间损耗, 损耗说明, 退押金, 退房卡押金, 留存金额, 电话, 身份证, 备注 } = req.body;
   const 房 = data.rooms.find(r => r.房号 === 房号);
   if (!房) return res.status(404).json({ 错误: '房间不存在' });
   // 押金/房卡押金：复选框勾选才退（默认勾选）；留存金额：预缴房间退房时的剩余预缴金
@@ -498,7 +524,7 @@ app.post('/api/checkout', (req, res) => {
   const 卫生费 = Number(退房卫生费) || 0, 损耗 = Number(房间损耗) || 0;
   // 退还金额 = 押金 + 房卡押金 + 留存金额 − 水电费 − 卫生费 − 损耗费
   const 退入金额 = 舍入(押金额 + 房卡押金额 + 留存 - 水电总额 - 卫生费 - 损耗);
-  const 记录 = { id: 新id(data.退房记录), 日期: 日期 || 今天(), 房号, 租客: 房.租客姓名 || '', 电话: 电话 || 房.电话 || '', 身份证: 身份证 || 房.身份证 || '', 押金: 押金额, 房卡押金: 房卡押金额, 上月水底: 上月水底 || '', 上月电底: 上月电底 || '', 退房水底: 退房水底 || '', 退房电底: 退房电底 || '', 水费单价: 水价, 电费单价: 电价, 用水量, 用电量, 水费, 电费, 水电总额, 退房卫生费: 卫生费, 房间损耗: 损耗, 损耗说明: 损耗说明 || '', 留存金额: 留存, 退入金额, 房间快照: 房 };
+  const 记录 = { id: 新id(data.退房记录), 日期: 日期 || 今天(), 房号, 租客: 房.租客姓名 || '', 电话: 电话 || 房.电话 || '', 身份证: 身份证 || 房.身份证 || '', 押金: 押金额, 房卡押金: 房卡押金额, 上月水底: 上月水底 || '', 上月电底: 上月电底 || '', 退房水底: 退房水底 || '', 退房电底: 退房电底 || '', 水费单价: 水价, 电费单价: 电价, 用水量, 用电量, 水费, 电费, 水电总额, 退房卫生费: 卫生费, 房间损耗: 损耗, 损耗说明: 损耗说明 || '', 留存金额: 留存, 退入金额, 备注: 备注 || '', 房间快照: 房 };
   data.退房记录.push(记录);
   // 只有实退 > 0 才补支出流水（退房退还）；≤ 0 说明没实际退钱，不进支出列表、也不存流水 id
   if (退入金额 > 0) {
@@ -511,7 +537,13 @@ app.post('/api/checkout', (req, res) => {
   写数据(data);
   res.json(记录);
 });
-function 今天() { return new Date().toISOString().slice(0, 10); }
+// ============ 北京时间（全局时间基准） ============
+// 固定 UTC+8，不看服务器时区：机器时区设错了也照样按北京时间算账。
+// 做法是把时间戳加 8 小时，再用 getUTC* 读——读出来的就是北京的年月日时分。
+function 北京(时刻) { const d = 时刻 ? new Date(时刻) : new Date(); return new Date(d.getTime() + 8 * 3600 * 1000); }
+function 补零(n) { return String(n).padStart(2, '0'); }
+function 北京日期(时刻) { const b = 北京(时刻); return `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())}`; }
+function 今天() { return 北京日期(); }
 // 某日期距今天多少天（今天=0，昨天=1，前天=2…）。按日期字符串拆年月日算，避免时区偏移把结果带偏
 function 距今天数(日期) {
   const [y, m, d] = String(日期).slice(0, 10).split('-').map(Number);
@@ -570,7 +602,7 @@ app.get('/api/meters', (req, res) => {
 });
 app.post('/api/meters', (req, res) => {
   const data = 读数据();
-  const { 房号, 水表, 电表, 日期 } = req.body;
+  const { 房号, 水表, 电表, 日期, 上月水表, 上月电表 } = req.body;
   const 房 = data.rooms.find(r => r.房号 === 房号);
   // 抄表日期按交租日（入住日日号）落到当前月份；无入住日则用传入日期或今天
   let 抄表日期 = 日期 || 今天();
@@ -578,7 +610,8 @@ app.post('/api/meters', (req, res) => {
     const 日 = Number(String(房.入住日).slice(8, 10));
     if (日) 抄表日期 = `${data.settings.当前月份}-${String(日).padStart(2, '0')}`;
   }
-  const 记录 = { id: 新id(data.meters), 日期: 抄表日期, 房号, 水表, 电表 };
+  // 上月水表/电表：水电抄表页允许手动改「上月底度」，改了就连同本月读数一起存，算用量时优先用它
+  const 记录 = { id: 新id(data.meters), 日期: 抄表日期, 房号, 水表, 电表, 上月水表: 上月水表 ?? '', 上月电表: 上月电表 ?? '' };
   data.meters.push(记录); 写数据(data); res.json(记录);
 });
 // 删除某房某月最后一条抄表（撤销）—— 必须放在 /:id 之前，否则 /:id 会拦截 /undo
@@ -621,12 +654,17 @@ app.get('/api/bills', (req, res) => {
     for (const 房 of 列表) for (const 月 of [...月集合].sort()) 账单.push(生成账单(data, 房, 月));
   } else {
     账单 = 列表.map(房 => 生成账单(data, 房, 月份));
-    // 无房号、无日筛选（月度账单）时补充空置房，状态「未出租」
+    // 无房号、无日筛选（月度账单）时补充空置房（状态「未出租」）和已退房房（状态「已退房」）
     if (!日 && !房号) {
       const 在租房号 = new Set(列表.map(房 => 房.房号));
       const 隐藏 = new Set(data.settings.隐藏房号 || []);
       for (const h of data.房源) {
         if (!在租房号.has(h.房号) && !隐藏.has(h.房号)) 账单.push({ 房号: h.房号, 租客: '', 状态: '未出租', 交租日: null });
+      }
+      // 已退房房：房号已不在 rooms，但当月 bills 里还留着核收/追缴，补一行让「已收」不缩水
+      for (const b of data.bills) {
+        if (b.月份 !== 月份 || 在租房号.has(b.房号)) continue;
+        账单.push({ 房号: b.房号, 租客: '', 状态: '已退房', 交租日: null, 交租日期: '', 房租: null, 管理费: null, 水费: null, 电费: null, 新收押金: 0, 补缴: b.补缴 || 0, 结转: 0, 转下月: 0, 预缴: 0, 应付租金: null, 实收: b.实收 || 0, 欠款: 0, 可计算: false, 月份 });
       }
       按房号排序(账单);
     }
@@ -708,9 +746,9 @@ const 房态状态集 = ['空闲', '在住', '脏房'];
 // 日租营业日：早 6 点换日。8-26 06:00 ~ 8-27 05:59 的生意全算 8-26 这一天。
 // 必须用本地时间（服务器在 +08），不能用 toISOString——那是 UTC，中国时间早 8 点前会退成前一天。
 function 营业日(时刻) {
-  const d = 时刻 ? new Date(时刻) : new Date();
-  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const b = 北京(时刻);
+  if (b.getUTCHours() < 6) b.setUTCDate(b.getUTCDate() - 1);
+  return `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())}`;
 }
 // 把房态清回「空闲」：撤销入住、删记录、确认清洁都用它，免得各处漏字段
 function 清空房态(态, 额外) {
@@ -994,16 +1032,30 @@ app.delete('/api/memos/:id', (req, res) => {
   写数据(data); res.json({ ok: true });
 });
 
+// 已离租房（退房/换房后房号已不在 rooms）当月仍留有 bills 记录，它们已核收/追缴的钱不能随房间消失：
+// 补回实收 + 补缴，让「月租已收」在退房后不缩水。
+function 离租房已收(data, 月份) {
+  const 在租 = new Set(data.rooms.map(r => r.房号));
+  let 合计 = 0;
+  for (const b of data.bills) {
+    if (b.月份 !== 月份) continue;
+    if (在租.has(b.房号)) continue;
+    合计 += (b.实收 || 0) + (b.补缴 || 0);
+  }
+  return 合计;
+}
+
 // 总览
 app.get('/api/summary', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
   let 月租已收 = 0; const 欠费 = [], 空置 = [], 数据不齐 = [];
   // 空置 = 房源清单 − 在租房号 − 日租房/自住房（日租、自住房不显示为空置）
   const 在租房号 = new Set(data.rooms.map(r => r.房号));
+  const 脏房 = new Set(data.settings.空置脏房 || []);
   for (const 源 of data.房源) {
     if (在租房号.has(源.房号)) continue;
     if (源.房型 === '日租' || 源.房型 === '自住房') continue;
-    空置.push({ 房号: 源.房号 });
+    空置.push({ 房号: 源.房号, 脏: 脏房.has(源.房号) });
   }
   for (const 房 of data.rooms) {
     const 缺 = 缺项(房);
@@ -1014,10 +1066,25 @@ app.get('/api/summary', (req, res) => {
     // 状态模块只列「已抄表」或「上月有欠费转入」的未交/欠款房，纯未抄表（无结转）不在总览列
     if (!缺.length && (账单.状态 === '未交' || 账单.状态 === '欠款') && (账单.可计算 || 账单.结转 > 0)) 欠费.push(账单);
   }
+  // 退房后房间已从 rooms 移除，但当月已核收/追缴的钱不能跟着消失（用户要求退房不影响核/追缴金额）
+  月租已收 += 离租房已收(data, 月份);
   const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
   const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
   const 工资 = 月工资(data.settings, 月份); // 工资：按「设置 → 数据 → 工资变量」的分段计算
   res.json({ 月份, 月租已收: 舍入(月租已收), 日租已收: 舍入(日租已收), 支出: 舍入(支出), 工资, 合计: 舍入(月租已收 + 日租已收 - 支出 - 工资), 欠费, 空置, 数据不齐 });
+});
+
+// 切换空置房脏/净标记：点一下标「脏房」（黄色），再点一下回「净房」（无色）。房号存在性由前端按房源清单约束
+app.post('/api/vacant/toggle', (req, res) => {
+  const data = 读数据();
+  const 房号 = String(req.body.房号 || '');
+  if (!房号) return res.status(400).json({ 错误: '缺少房号' });
+  if (!data.settings.空置脏房) data.settings.空置脏房 = [];
+  const 列表 = data.settings.空置脏房;
+  const i = 列表.indexOf(房号);
+  if (i >= 0) 列表.splice(i, 1); else 列表.push(房号);
+  写数据(data);
+  res.json({ 房号, 脏: i < 0 });
 });
 
 // 固化月度总账单：把某月总账单写入历史总账单（切月时调用）
@@ -1029,6 +1096,8 @@ app.post('/api/settle', (req, res) => {
     const 账单 = 生成账单(data, 房, 月份);
     月租已收 += 账单.实收 + (账单.补缴 || 0) + (账单.新收押金 || 0) + (账单.预缴 || 0);
   }
+  // 切月固化时同样补上已离租房的核收/追缴，口径与 /api/summary 一致
+  月租已收 += 离租房已收(data, 月份);
   const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
   const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
   let 记录 = data.历史总账单.find(h => h.月份 === 月份);

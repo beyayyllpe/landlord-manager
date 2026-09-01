@@ -12,12 +12,31 @@ function 数字(n) { return String(Math.round(Number(n) || 0)); }
 function 精金额(n) { return String(Math.round((Number(n) || 0) * 100) / 100); }
 // 短日期："2026-08-24" → "8月24日"（房租单日期列用）
 function 短日期(日期) { if (!日期) return '—'; const [, m, d] = String(日期).split('-'); return `${Number(m)}月${Number(d)}日`; }
-function 今天() { return new Date().toISOString().slice(0, 10); }
-// 日租营业日：早 6 点换日（26 日 6:00 ~ 27 日 5:59 都算 26 日）。用本地时间，不能用 toISOString（那是 UTC）
+// ============ 北京时间（全局时间基准） ============
+// 两层保障：① 固定 UTC+8，不看设备时区；② 每 6 小时跟服务器校准一次时钟。
+// 这样手机/电脑的时间设歪了也不会把账记到别的日子，前后端算出的营业日始终一致。
+let 时间偏移 = 0;   // 服务器时间 − 本机时间（毫秒），校准失败就保持 0、退回本机时间
+function 现在() { return new Date(Date.now() + 时间偏移); }
+function 补零(n) { return String(n).padStart(2, '0'); }
+// 加 8 小时后用 getUTC* 读，读出来就是北京的年月日时分
+function 北京(时刻) { const d = 时刻 ? new Date(时刻) : 现在(); return new Date(d.getTime() + 8 * 3600 * 1000); }
+function 北京日期(时刻) { const b = 北京(时刻); return `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())}`; }
+function 北京时分(时刻) { const b = 北京(时刻); return `${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}`; }
+function 今天() { return 北京日期(); }
+// 日租营业日：早 6 点换日（26 日 6:00 ~ 27 日 5:59 都算 26 日）
 function 营业日(时刻) {
-  const d = 时刻 ? new Date(时刻) : new Date();
-  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const b = 北京(时刻);
+  if (b.getUTCHours() < 6) b.setUTCDate(b.getUTCDate() - 1);
+  return `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())}`;
+}
+async function 校准时间() {
+  const 发出 = Date.now();
+  const r = await api('/api/now').catch(() => null);
+  if (!r || !r.时间戳) return false;          // 拿不到就继续用本机时间，不影响使用
+  const 收到 = Date.now();
+  // 减掉一半往返耗时，粗略补偿网络延迟
+  时间偏移 = r.时间戳 + (收到 - 发出) / 2 - 收到;
+  return true;
 }
 // 某日期距今天多少天（今天=0，昨天=1，前天=2…）。按日期字符串拆年月日算，避免时区偏移把结果带偏
 function 距今天数(日期) {
@@ -32,7 +51,7 @@ function 加月(月份, 偏移) { const [y, m] = String(月份).split('-').map(N
 function 中文日期(日期) { if (!日期) return ''; const [y, m, d] = String(日期).split('-'); return `${y}年${Number(m)}月${Number(d)}日`; }
 function 中文年月(月份) { if (!月份) return ''; const [y, m] = String(月份).split('-'); return `${y}年${Number(m)}月`; }
 function 状态徽章(状态) {
-  const map = { '已核收': '<span class="徽章 已核收">已核收</span>', '未交': '<span class="徽章 未交">未交</span>', '欠款': '<span class="徽章 欠款">欠款</span>', '未出租': '<span class="徽章 未出租">未出租</span>' };
+  const map = { '已核收': '<span class="徽章 已核收">已核收</span>', '未交': '<span class="徽章 未交">未交</span>', '欠款': '<span class="徽章 欠款">欠款</span>', '未出租': '<span class="徽章 未出租">未出租</span>', '已退房': '<span class="徽章 已退房">已退房</span>' };
   return map[状态] || 状态;
 }
 
@@ -221,7 +240,14 @@ document.getElementById('导航').addEventListener('click', e => {
 });
 
 const 页面渲染 = { '总览': 渲染总览, '房间': 渲染房间, '抄表': 渲染抄表, '账单': 渲染租客账单, '月租': 渲染月租, '月度账单': 渲染账单, '日租': 渲染日租, '退房': 渲染退房, '收支': 渲染收支, '设置': 渲染设置 };
-async function 渲染() { document.getElementById('月份显示').textContent = '当月 ' + 全局.settings.当前月份; await 页面渲染[当前页](document.getElementById('内容')); }
+// 顶栏时钟：北京时间到分。凌晨 0–6 点时额外标出当前营业日（那会儿营业日还是昨天）
+function 更新顶栏时间() {
+  const el = document.getElementById('月份显示');
+  if (!el) return;
+  const 业 = 营业日();
+  el.textContent = `${北京日期()} ${北京时分()}` + (业 === 今天() ? '' : `　营业日 ${业.slice(5)}`);
+}
+async function 渲染() { 更新顶栏时间(); await 页面渲染[当前页](document.getElementById('内容')); }
 
 // ============ 总览 ============
 async function 渲染总览(容器) {
@@ -246,40 +272,48 @@ async function 渲染总览(容器) {
       ${s.欠费.length ? `<div class="表格容器"><table>
         <tr><th>房号</th><th>租客</th><th class="数字">应付租金</th><th class="数字">实收</th><th>状态</th><th class="数字">欠款</th><th></th></tr>
         ${s.欠费.map(b => {
-          const 未抄 = b.状态 === '未交' && !b.可计算;
-          const 默认实收 = 未抄 ? '' : (b.实收 > 0 ? b.实收 : b.应付租金);
+          const 未抄 = !b.可计算;                          // 真·未抄表：本月费用算不出（应付租金为 null）
+          const 有结转 = (b.结转 || 0) > 0;                 // 上月欠费滚存转入
+          const 可操作 = b.可计算 || 有结转;                // 已抄表 或 有欠费滚存转入 → 都能核收/追缴
+          const 默认实收 = !可操作 ? '' : (b.实收 > 0 ? b.实收 : (b.可计算 ? b.应付租金 : b.结转));
           return `<tr>
             <td><b>${转义(b.房号)}</b></td><td>${转义(b.租客||'')}</td>
-            <td class="数字">${未抄 ? '未抄表' : '¥' + 数字(b.应付租金)}</td>
-            <td class="数字">${未抄 ? '—' : `<input type="number" class="抄表输入" id="实收${转义(b.房号)}" value="${数字(默认实收)}">`}</td>
+            <td class="数字">${未抄 ? (有结转 ? '¥' + 数字(b.结转) + '（结转）' : '未抄表') : '¥' + 数字(b.应付租金)}</td>
+            <td class="数字">${!可操作 ? '—' : `<input type="number" class="抄表输入" id="实收${转义(b.房号)}" value="${数字(默认实收)}">`}</td>
             <td>${状态徽章(b.状态)}</td>
             <td class="数字" style="color:var(--红)">${b.状态==='欠款' && b.欠款 > 0 ? '¥' + 数字(b.欠款) : ''}</td>
             <td style="white-space:nowrap">
-              ${未抄 ? '' : `<button class="btn 行内" onclick="核收('${转义(b.房号)}')">核收</button>`}
-              ${未抄 ? '' : `<button class="btn 行内 危险" onclick="平账('${转义(b.房号)}')">平账</button>`}
-              ${未抄 ? '' : `<button class="btn 行内 成功" onclick="追缴('${转义(b.房号)}')">追缴</button>`}
-              ${未抄 ? '' : `<button class="btn 行内 成功" onclick="欠费滚存('${转义(b.房号)}')">欠费滚存</button>`}
+              ${可操作 ? `<button class="btn 行内" onclick="核收('${转义(b.房号)}')">核收</button>` : ''}
+              ${可操作 ? `<button class="btn 行内 危险" onclick="平账('${转义(b.房号)}')">平账</button>` : ''}
+              ${可操作 ? `<button class="btn 行内 成功" onclick="追缴('${转义(b.房号)}')">追缴</button>` : ''}
+              ${b.可计算 ? `<button class="btn 行内 成功" onclick="欠费滚存('${转义(b.房号)}')">欠费滚存</button>` : ''}
             </td>
           </tr>`;
         }).join('')}
       </table></div>` : '<div class="空">无欠费 👍</div>'}
     </div>
     ${折叠卡片('空置', `<h2 style="margin:0">🏚 空置房间（${s.空置.length}）</h2>`,
-      s.空置.length ? 空置按楼层(s.空置.map(x => x.房号)) : '<div class="空">无空置房间</div>')}`;
+      s.空置.length ? 空置按楼层(s.空置) : '<div class="空">无空置房间</div>')}`;
 }
-function 空置按楼层(房号列表) {
+function 空置按楼层(空置列表) {
   const 组 = {};
-  for (const 房号 of 房号列表) {
+  for (const 项 of 空置列表) {
+    const 房号 = typeof 项 === 'object' ? 项.房号 : 项;
+    const 脏 = typeof 项 === 'object' ? !!项.脏 : false;
     const n = parseInt(房号);
     const 层 = 房号 === '阁楼' ? '阁楼' : (isNaN(n) ? '其他' : Math.floor(n / 100) + ' 层');
-    (组[层] = 组[层] || []).push(房号);
+    (组[层] = 组[层] || []).push({ 房号, 脏 });
   }
   const 序 = { '阁楼': 99, '其他': 98 };
   return Object.entries(组)
     .sort((a, b) => ((序[a[0]] ?? parseInt(a[0])) - (序[b[0]] ?? parseInt(b[0]))))
-    .map(([层, 房们]) => `<div class="楼层行"><span class="楼层名">${层}</span>${房们.map(f => `<span class="空置房">${转义(f)}</span>`).join('')}</div>`)
+    .map(([层, 房们]) => `<div class="楼层行"><span class="楼层名">${层}</span>${房们.map(f => `<span class="空置房${f.脏 ? ' 脏' : ''}" onclick="切换空置脏净('${转义(f.房号)}')" title="${f.脏 ? '脏房 · 点一下变净房' : '净房 · 点一下变脏房'}">${转义(f.房号)}${f.脏 ? ' 🧹' : ''}</span>`).join('')}</div>`)
     .join('');
 }
+window.切换空置脏净 = async function(房号) {
+  await api('/api/vacant/toggle', { method: 'POST', body: { 房号 } });
+  渲染();
+};
 // 核收：记录实收金额，交齐→已核收（从状态消失），没交齐→欠款（保留并标欠费）
 window.核收 = async function(房号) {
   const 实收 = document.getElementById('实收' + 房号)?.value;
@@ -656,6 +690,7 @@ window.打开退房模态 = async function(房号) {
         <div class="字段"><label>房间损耗（说明）</label><input id="退损耗说明" placeholder="如：墙壁损坏、床垫破损"></div>
         <div class="字段"><label>房间损耗（金额）</label><input id="退损耗" type="number" placeholder="0（没损耗就留空）"></div>
       </div>
+      <div class="字段"><label>备注</label><input id="退备注" placeholder="选填，如：押金抵扣、水电争议等"></div>
     </div>
     <div style="margin-top:14px;display:flex;gap:8px">
       <button class="btn 危险" onclick="确认退房('${转义(房号)}')">确认退房</button>
@@ -663,7 +698,7 @@ window.打开退房模态 = async function(房号) {
     </div>`);
 };
 window.确认退房 = async function(房号) {
-  const body = { 房号, 日期: document.getElementById('退日期').value, 上月水底: document.getElementById('退上月水').value, 上月电底: document.getElementById('退上月电').value, 退房水底: document.getElementById('退水底').value, 退房电底: document.getElementById('退电底').value, 退房卫生费: document.getElementById('退卫生费').value, 房间损耗: document.getElementById('退损耗').value, 损耗说明: document.getElementById('退损耗说明').value, 退押金: document.getElementById('退押金')?.checked ?? true, 退房卡押金: document.getElementById('退房卡押金')?.checked ?? true, 留存金额: document.getElementById('退留存')?.value || 0, 电话: document.getElementById('退电话')?.value || '', 身份证: document.getElementById('退身份证')?.value || '' };
+  const body = { 房号, 日期: document.getElementById('退日期').value, 上月水底: document.getElementById('退上月水').value, 上月电底: document.getElementById('退上月电').value, 退房水底: document.getElementById('退水底').value, 退房电底: document.getElementById('退电底').value, 退房卫生费: document.getElementById('退卫生费').value, 房间损耗: document.getElementById('退损耗').value, 损耗说明: document.getElementById('退损耗说明').value, 退押金: document.getElementById('退押金')?.checked ?? true, 退房卡押金: document.getElementById('退房卡押金')?.checked ?? true, 留存金额: document.getElementById('退留存')?.value || 0, 电话: document.getElementById('退电话')?.value || '', 身份证: document.getElementById('退身份证')?.value || '', 备注: document.getElementById('退备注')?.value || '' };
   if (!(await 询问确认('确认退房？', `${转义(房号)}　退房后房间变空置，结算结果见退租结算单`))) return;
   const r = await api('/api/checkout', { method: 'POST', body });
   if (r.错误) { 提示(r.错误); return; }
@@ -710,8 +745,10 @@ async function 渲染抄表(容器) {
       ${未抄表列表.length ? `<div class="表格容器"><table>
         <tr><th>房号</th><th>租客</th><th>交租日</th><th class="数字">上月水表</th><th class="数字">本月水表</th><th class="数字">上月电表</th><th class="数字">本月电表</th><th></th></tr>
         ${未抄表列表.map(x => `<tr><td><b>${转义(x.房号)}</b></td><td>${转义(x.租客)}</td><td>${x.交租日 ? x.交租日 + '号' : '—'}</td>
-          <td class="数字">${x.上月水表 ?? ''}</td><td class="数字"><input type="number" class="抄表输入" id="快水${转义(x.房号)}" placeholder="本月底数"></td>
-          <td class="数字">${x.上月电表 ?? ''}</td><td class="数字"><input type="number" class="抄表输入" id="快电${转义(x.房号)}" placeholder="本月底数"></td>
+          <td class="数字"><input type="number" class="抄表输入" id="快上月水${转义(x.房号)}" value="${x.上月水表 ?? ''}" placeholder="上月底度"></td>
+          <td class="数字"><input type="number" class="抄表输入" id="快水${转义(x.房号)}" placeholder="本月底数"></td>
+          <td class="数字"><input type="number" class="抄表输入" id="快上月电${转义(x.房号)}" value="${x.上月电表 ?? ''}" placeholder="上月底度"></td>
+          <td class="数字"><input type="number" class="抄表输入" id="快电${转义(x.房号)}" placeholder="本月底数"></td>
           <td><button class="btn 行内" onclick="快速抄表('${转义(x.房号)}')">记录</button></td></tr>`).join('')}</table></div>`
         : '<div class="空">本月全部已抄表 ✓</div>'}
     </div>
@@ -754,8 +791,9 @@ window.过滤抄表 = function() {
 };
 window.快速抄表 = async function(房号) {
   const 水 = document.getElementById('快水' + 房号).value, 电 = document.getElementById('快电' + 房号).value;
+  const 上月水 = document.getElementById('快上月水' + 房号)?.value ?? '', 上月电 = document.getElementById('快上月电' + 房号)?.value ?? '';
   if (水 === '' && 电 === '') { 提示('请填读数'); return; }
-  await api('/api/meters', { method: 'POST', body: { 房号, 水表: 水 === '' ? null : 水, 电表: 电 === '' ? null : 电 } });
+  await api('/api/meters', { method: 'POST', body: { 房号, 水表: 水 === '' ? null : 水, 电表: 电 === '' ? null : 电, 上月水表: 上月水, 上月电表: 上月电 } });
   提示('已记录'); 渲染();
 };
 window.撤销抄表记录 = async function(房号, 日期) {
@@ -808,11 +846,13 @@ async function 渲染租客账单(容器) {
         <div class="明细行">
           <span class="明细标签"><span class="标签名">水费详细（${精金额(b.水费单价)}元/方）</span><span class="冒号">：</span></span>
           <span class="明细底度">${b.上月水底 ?? '—'} → ${b.本月水底 ?? '—'}</span>
+          <span class="明细用量">${水电可用 ? `用 ${精金额(b.用水量)} 方` : ''}</span>
           <span class="明细金额"><span class="金额词">金额：</span><b class="钱数">${水电可用 ? '¥' + 精金额(b.水费) : '—'}</b></span>
         </div>
         <div class="明细行">
           <span class="明细标签"><span class="标签名">电费详细（${精金额(b.电费单价)}元/度）</span><span class="冒号">：</span></span>
           <span class="明细底度">${b.上月电底 ?? '—'} → ${b.本月电底 ?? '—'}</span>
+          <span class="明细用量">${水电可用 ? `用 ${精金额(b.用电量)} 度` : ''}</span>
           <span class="明细金额"><span class="金额词">金额：</span><b class="钱数">${水电可用 ? '¥' + 精金额(b.电费) : '—'}</b></span>
         </div>
         <div class="明细行">
@@ -1042,8 +1082,10 @@ function 月租表HTML(账单, 月, 只读) {
     <div class="表格容器"><table><tr><th>房号</th><th>交租日期</th><th class="数字">房租</th><th class="数字">新收押金</th><th class="数字">管理费</th><th class="数字">水费</th><th class="数字">电费</th><th class="数字">欠费滚存</th><th class="数字">实收</th><th>状态</th>${只读 ? '' : '<th></th>'}</tr>
     ${显示账单.map(b => {
       const 未出租 = b.状态 === '未出租';
-      const 操作 = (只读 || 未出租 || !启用删除) ? '' : `<td><button class="btn 行内 危险" onclick="删除账单('${转义(b.房号)}','${月}')">删</button></td>`;
-      return `<tr><td><b>${转义(b.房号)}</b></td><td>${未出租 ? '—' : 转义(b.交租日期 || '')}</td><td class="数字">${未出租 ? '—' : 数字(b.房租)}</td><td class="数字">${未出租 ? '—' : (b.新收押金 ? 数字(b.新收押金) : '')}</td><td class="数字">${未出租 ? '—' : 数字(b.管理费)}</td><td class="数字">${未出租 ? '—' : 数字(b.水费)}</td><td class="数字">${未出租 ? '—' : 数字(b.电费)}</td><td class="数字">${未出租 ? '—' : (b.结转 ? 数字(b.结转) : '')}</td><td class="数字">${未出租 ? '—' : '¥' + 数字((b.实收 || 0) + (b.补缴 || 0) + (b.新收押金 || 0) + (b.预缴 || 0))}</td><td>${状态徽章(b.状态)}${!未出租 && b.欠款 > 0 ? ` <span style="color:var(--红)">¥${数字(b.欠款)}</span>` : ''}</td>${操作}</tr>`;
+      const 已退房 = b.状态 === '已退房';
+      const 空列 = 未出租 || 已退房;   // 空置房 / 已退房房：房租、水电等明细列显示「—」
+      const 操作 = (只读 || 空列 || !启用删除) ? '' : `<td><button class="btn 行内 危险" onclick="删除账单('${转义(b.房号)}','${月}')">删</button></td>`;
+      return `<tr><td><b>${转义(b.房号)}</b></td><td>${空列 ? '—' : 转义(b.交租日期 || '')}</td><td class="数字">${空列 ? '—' : 数字(b.房租)}</td><td class="数字">${空列 ? '—' : (b.新收押金 ? 数字(b.新收押金) : '')}</td><td class="数字">${空列 ? '—' : 数字(b.管理费)}</td><td class="数字">${空列 ? '—' : 数字(b.水费)}</td><td class="数字">${空列 ? '—' : 数字(b.电费)}</td><td class="数字">${空列 ? '—' : (b.结转 ? 数字(b.结转) : '')}</td><td class="数字">${未出租 ? '—' : '¥' + 数字((b.实收 || 0) + (b.补缴 || 0) + (b.新收押金 || 0) + (b.预缴 || 0))}</td><td>${状态徽章(b.状态)}${!空列 && b.欠款 > 0 ? ` <span style="color:var(--红)">¥${数字(b.欠款)}</span>` : ''}</td>${操作}</tr>`;
     }).join('')}</table></div></div>`;
 }
 async function 渲染月租(容器) {
@@ -1187,19 +1229,20 @@ function 房态卡(r) {
     <div class="房态卡身">${正文}</div>
   </button>`;
 }
-// ISO 时间戳 → "8月26日 14:30"（房态记的是 new Date().toISOString()）
+// ISO 时间戳 → "8月26日 14:30"（房态记的是 new Date().toISOString()）。按北京时间读
 function 时刻(iso) {
   if (!iso) return '';
   const t = new Date(iso);
   if (isNaN(t)) return '';
-  return `${t.getMonth() + 1}月${t.getDate()}日 ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  const b = 北京(t);
+  return `${b.getUTCMonth() + 1}月${b.getUTCDate()}日 ${北京时分(t)}`;
 }
 function 找房态(房号) { return (房态数据 && 房态数据.房间.find(r => r.房号 === 房号)) || null; }
-// 钟点房到点时刻，只要时分："18:30"
+// 钟点房到点时刻，只要时分："18:30"（北京时间）
 function 时刻到点(iso) {
   if (!iso) return '';
   const t = new Date(iso);
-  return isNaN(t) ? '' : `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  return isNaN(t) ? '' : 北京时分(t);
 }
 // 剩余分钟 → "1 小时 20 分" / "45 分"
 function 余时文(分钟) {
@@ -1215,7 +1258,6 @@ window.点房间 = function(房号) {
   else if (r.状态 === '脏房') 打开脏房详情(r);
   else 打开入住模态(r);
 };
-const 钟点房默认价 = 60;   // 选钟点房时自动带出的房费
 function 打开入住模态(r) {
   打开模态(`<h2>办理入住 —— ${转义(r.房号)}</h2>
     <div class="房型区">
@@ -1266,10 +1308,10 @@ window.选住房型 = function(房型) {
   const 天数框 = document.getElementById('住天数');
   天数框.disabled = 钟点;                       // 钟点房按小时算，天数没意义
   天数框.value = 钟点 ? 1 : (天数框.value || 1);
-  // 钟点房带出默认价。只在金额空着时填，不覆盖手输的数；切回全日房时再把自动填的那笔清掉
+  // 钟点房带出默认价（可在「设置 → 参数 → 钟点房变量」改）。只在金额空着时填，不覆盖手输的数；切回全日房时再把自动填的那笔清掉
   const 金额框 = document.getElementById('住金额');
   if (钟点) {
-    if (!金额框.value.trim()) { 金额框.value = 钟点房默认价; 金额框.dataset.自动 = '1'; }
+    if (!金额框.value.trim()) { 金额框.value = Number(全局.settings.钟点房默认价) || 60; 金额框.dataset.自动 = '1'; }
   } else if (金额框.dataset.自动 === '1') {
     金额框.value = ''; delete 金额框.dataset.自动;
   }
@@ -1835,6 +1877,14 @@ async function 设置_参数() {
       <div style="margin-top:12px"><button class="btn" onclick="保存水电单价()">保存水电单价</button></div>
     </div>
     <div class="卡片">
+      <h2>⏰ 钟点房变量</h2>
+      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">日租办入住选「钟点房」时，金额框留空会自动带出这个默认房费（手输的金额不被覆盖）。</p>
+      <div class="表单 两列">
+        <div class="字段"><label>默认房费（元）</label><input id="设钟点价" type="number" step="0.01" min="0" value="${s.钟点房默认价 ?? 60}"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn" onclick="保存钟点房默认价()">保存钟点房默认价</button></div>
+    </div>
+    <div class="卡片">
       <h2>💰 工资变量</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">按起始月份分段生效，影响「总账单」和总览的工资/利润/净利润计算；改动的分段只影响它之后的历史月份，之前的历史数字不变。起始月份之前、以及没有匹配分段的月份按 0 算。</p>
       <div class="表格容器"><table>
@@ -1895,6 +1945,15 @@ window.保存水电单价 = async function() {
   if (!(电价 > 0)) { 提示('电费单价要填大于 0 的数字'); return; }
   if (!await 询问确认('保存水电单价', `水费 ${精金额(水价)} 元/方、电费 ${精金额(电价)} 元/度。<br>房间档案里单价留空的房间，往后都按这个价算。`)) return;
   const s = await api('/api/settings', { method: 'POST', body: { 水价, 电价 } });
+  if (s.错误) { 提示(s.错误); return; }
+  全局.settings = s; 提示('已保存'); 刷新设置详情();
+};
+// 保存钟点房默认房费（日租办入住选钟点房时自动带出的金额）
+window.保存钟点房默认价 = async function() {
+  const 价 = Number(document.getElementById('设钟点价').value);
+  if (!(价 > 0)) { 提示('默认房费要填大于 0 的数字'); return; }
+  if (!await 询问确认('保存钟点房默认价', `日租办入住选「钟点房」时，金额框留空会自动带出 ${精金额(价)} 元。`)) return;
+  const s = await api('/api/settings', { method: 'POST', body: { 钟点房默认价: 价 } });
   if (s.错误) { 提示(s.错误); return; }
   全局.settings = s; 提示('已保存'); 刷新设置详情();
 };
@@ -2002,4 +2061,11 @@ window.切换房型 = async function(id, 当前) {
   提示('已切换为' + 新); 刷新设置详情();
 };
 
-(async function 初始化() { 应用主题(); 全局 = await api('/api/all'); 渲染(); })();
+(async function 初始化() {
+  应用主题();
+  await 校准时间();                                   // 先对表，再按北京时间渲染
+  全局 = await api('/api/all');
+  渲染();
+  setInterval(更新顶栏时间, 20000);                    // 顶栏时钟：20 秒刷一次，分钟跳变不会迟到
+  setInterval(校准时间, 6 * 3600 * 1000);              // 每 6 小时跟服务器校准一次时钟
+})();

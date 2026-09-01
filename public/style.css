@@ -33,7 +33,8 @@ body {
 .顶栏左 { display: flex; align-items: center; gap: 8px; }
 .logo { font-size: 20px; }
 .顶栏 h1 { font-size: 18px; font-weight: 700; }
-.月份显示 { font-size: 13px; opacity: .9; margin-left: auto; background: rgba(255,255,255,.2); padding: 2px 10px; border-radius: 12px; }
+/* 顶栏时钟：北京时间到分，等宽数字免得每分钟跳一下宽度 */
+.月份显示 { font-size: 13px; opacity: .95; margin-left: auto; background: rgba(255,255,255,.2); padding: 2px 10px; border-radius: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .顶栏下月 { margin-left: 8px; padding: 4px 12px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: rgba(255,255,255,.15); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .顶栏下月:hover { background: rgba(255,255,255,.3); }
 
@@ -99,6 +100,7 @@ th.数字 { text-align: right; }
 .徽章.未交 { background: #fee2e2; color: #b91c1c; }
 .徽章.欠款 { background: #fef9c3; color: #a16207; }
 .徽章.未出租 { background: #e2e8f0; color: #64748b; }
+.徽章.已退房 { background: #e0e7ff; color: #4f46e5; }
 
 /* 汇总大数字 */
 .汇总网格 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
@@ -125,7 +127,9 @@ th.数字 { text-align: right; }
 
 /* 空置房卡片 */
 .空置网格 { display: flex; flex-wrap: wrap; gap: 10px; }
-.空置房 { background: var(--灰); padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 16px; color: var(--次文字); }
+.空置房 { background: var(--灰); padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 16px; color: var(--次文字); cursor: pointer; }
+/* 空置房点一下标脏房（黄），再点一下回净房（无色） */
+.空置房.脏 { background: #fef9c3; color: #8a6d1a; }
 
 /* 租客账单卡片 */
 .账单卡 { border: 1px solid var(--边框); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--卡片); }
@@ -171,6 +175,10 @@ th.数字 { text-align: right; }
 .冒号 { flex: 0 0 auto; }
 .明细底度 { flex: 1; font-family: Consolas, "Courier New", monospace; color: var(--次文字); }
 .明细底度 input { width: 100%; }
+/* 实际度数（用 X 方 / 用 X 度）：放在底度与金额之间、右对齐。备注说明框是 .抄表输入 右对齐，
+   它的 padding-right(8px)+border(1px) 让 placeholder 末字「明」比框右缘靠左 9px；这里同样留 9px，
+   让实际度数的末位数字和「明」落在同一条竖线上。 */
+.明细用量 { flex: 0 0 auto; text-align: right; font-family: Consolas, "Courier New", monospace; color: var(--主色); font-weight: 600; padding-right: 9px; }
 .金额词 { width: 60px; text-align: right; white-space: nowrap; }
 .钱数 { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 .明细金额 { display: flex; align-items: baseline; gap: 6px; margin-right: 30px; color: var(--次文字); }
@@ -321,6 +329,7 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 :root[data-theme="dark"] .详情项,
 :root[data-theme="dark"] .退房明细行,
 :root[data-theme="dark"] .隐藏项 { background: var(--灰); }
+:root[data-theme="dark"] .空置房.脏 { background: #3a2f0a; color: #e3c46a; }
 :root[data-theme="dark"] .字段 input,
 :root[data-theme="dark"] .字段 select,
 :root[data-theme="dark"] .工具栏 input,
@@ -339,6 +348,7 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 :root[data-theme="dark"] .徽章.未交 { background: #3a1515; color: #f28b82; }
 :root[data-theme="dark"] .徽章.欠款 { background: #3a2f0a; color: #f0c542; }
 :root[data-theme="dark"] .徽章.未出租 { background: #241f2b; color: #9a94a5; }
+:root[data-theme="dark"] .徽章.已退房 { background: #1f2340; color: #9ca3f5; }
 :root[data-theme="dark"] .提示 { background: #e8e4ee; color: #141318; }
 :root[data-theme="dark"] .btn.次 { background: #3a3545; }
 :root[data-theme="dark"] .btn.黄 { background: #d99a1b; }
@@ -451,7 +461,7 @@ table.斑马 tr:hover td { background: #e6f4fb; }        /* 悬停整行提亮�
 @media (max-width: 760px) {
   .设置布局 { grid-template-columns: 1fr; }
   .设置目录 { position: static; flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px; }
-  .设置项 { flex: 0 0 auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; }
+  .设置项 { flex: 0 0 auto; width: auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; }
   .设置项.激活 { border-left-color: transparent; border-bottom-color: var(--主色); }
 }
 
