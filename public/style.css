@@ -488,3 +488,15 @@ table.斑马 tr:hover td { background: #e6f4fb; }        /* 悬停整行提亮�
 .更新日志区 div { padding: 2px 0; }
 .更新日志区 ul { list-style: disc; }
 .更新日志区 li { margin: 2px 0; }
+
+/* 预缴免缴月份：房租/管理费列显示「已预缴」而不是 0 */
+.已预缴 {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--绿);
+  background: color-mix(in srgb, var(--绿) 14%, transparent);
+  white-space: nowrap;
+}
