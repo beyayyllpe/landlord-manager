@@ -353,7 +353,7 @@ window.欠费滚存 = async function(房号) {
   const 账单 = await api(`/api/bills?month=${月份}`);
   const b = 账单.find(x => x.房号 === 房号);
   const 未抄 = b.应付租金 == null;
-  const 拖欠 = 未抄 ? 0 : Math.max(0, (b.应付租金 || 0) - (b.实收 || 0) - (b.补缴 || 0) - (b.转下月 || 0));
+  const 拖欠 = 未抄 ? 0 : Math.max(0, (b.应付租金 || 0) - (b.实收 || 0) - (b.补缴剩余 || 0) - (b.转下月 || 0));
   打开模态(`<h2>欠费滚存</h2>
     <p style="font-size:19px">房号 <b>${转义(房号)}</b>${未抄 ? '　<span style="color:var(--红)">本月未抄表</span>' : `　本月拖欠 <b style="color:var(--红)">¥${数字(拖欠)}</b>`}</p>
     <p style="color:var(--次文字);font-size:15px;margin:8px 0">欠费滚存（${加月(月份, 1)}）后，本月仍显示欠费，下月账单计入该金额。金额可手动修改。</p>
