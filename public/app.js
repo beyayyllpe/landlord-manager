@@ -224,6 +224,12 @@ let 全局 = { settings: { 当前月份: '' } };
 let 当前页 = '总览';
 let 启用删除 = false; // 删除模式开关：勾选后各页面的删除/撤销按钮才显示
 
+// ============ 切月锁死（前端） ============
+// 后端已锁定月：读快照、写接口一律拒绝。前端这里负责：显示「🔒 已锁定」标识、隐藏编辑/删除按钮、禁用输入框。
+function 锁定月集合() { return new Set((全局.月度快照 || []).map(k => k.月份)); }
+function 月份锁定(月) { const m = String(月 || '').slice(0, 7); return !!m && 锁定月集合().has(m); }
+function 锁定徽章(月) { return 月份锁定(月) ? '<span style="color:#e6a23c;font-size:13px;font-weight:700;white-space:nowrap">🔒 已锁定</span>' : ''; }
+
 // ============ 在线更新 ============
 let 当前版本信息 = null;   // 当前运行版本，每次进「设置 → 关于」时刷新（{版本,提交,日期}）
 let 更新检查结果 = null;   // /api/update/check 的结果缓存，null=还没检查过
@@ -860,7 +866,7 @@ window.过滤抄表 = function() {
   列表.sort((a, b) => (b.id || 0) - (a.id || 0)); // 最新录入的抄表排最前
   const 表 = document.getElementById('抄表记录表');
   表.innerHTML = `<tr><th>房号</th><th>日期</th><th class="数字">上月水表</th><th class="数字">本月水表</th><th class="数字">上月电表</th><th class="数字">本月电表</th><th></th></tr>` +
-    (列表.length ? 列表.map(m => `<tr><td><b>${转义(m.房号)}</b></td><td>${转义(m.日期)}</td><td class="数字">${(上月[m.id] || {}).水 ?? ''}</td><td class="数字">${m.水表 ?? ''}</td><td class="数字">${(上月[m.id] || {}).电 ?? ''}</td><td class="数字">${m.电表 ?? ''}</td><td>${启用删除 ? `<button class="btn 行内 危险" onclick="撤销抄表记录('${转义(m.房号)}','${转义(m.日期)}')">撤销</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7" class="空">无记录</td></tr>');
+    (列表.length ? 列表.map(m => `<tr><td><b>${转义(m.房号)}</b></td><td>${转义(m.日期)}</td><td class="数字">${(上月[m.id] || {}).水 ?? ''}</td><td class="数字">${m.水表 ?? ''}</td><td class="数字">${(上月[m.id] || {}).电 ?? ''}</td><td class="数字">${m.电表 ?? ''}</td><td>${启用删除 && !月份锁定(m.日期) ? `<button class="btn 行内 危险" onclick="撤销抄表记录('${转义(m.房号)}','${转义(m.日期)}')">撤销</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7" class="空">无记录</td></tr>');
   const 计数 = document.getElementById('抄表计数');
   if (计数) 计数.textContent = (房号词 || 日期词) ? `匹配 ${列表.length} 条` : '';
 };
@@ -914,7 +920,7 @@ async function 渲染租客账单(容器) {
       <div class="账单卡头">
         <b class="头日期">${中文日期(b.交租日期)}</b>
         <b class="房号">房号：${转义(b.房号)}</b>
-        <span class="单标题">（房租缴纳单）</span>
+        <span class="单标题">（房租缴纳单）${锁定徽章(b.月份)}</span>
       </div>
 
       <div class="房租单明细">
@@ -932,8 +938,8 @@ async function 渲染租客账单(容器) {
         </div>
         <div class="明细行">
           <span class="明细标签"><span class="标签名 备注名">备注信息</span><span class="冒号">：</span></span>
-          <span class="明细底度"><input id="损${转义(b.房号)}说明" class="抄表输入" value="${转义(b.损耗说明||'')}" placeholder="备注说明" onchange="改损耗说明('${转义(b.房号)}','${b.月份}',this.value)"></span>
-          <span class="明细金额"><span class="金额词">金额：</span><input id="损${转义(b.房号)}金额" type="number" class="抄表输入 钱数" value="${b.房间损耗 || ''}" placeholder="0" onchange="改损耗('${转义(b.房号)}','${b.月份}',this.value)"></span>
+          <span class="明细底度"><input id="损${转义(b.房号)}说明" class="抄表输入" value="${转义(b.损耗说明||'')}" placeholder="${月份锁定(b.月份) ? '已锁定' : '备注说明'}" ${月份锁定(b.月份) ? 'disabled' : ''} onchange="改损耗说明('${转义(b.房号)}','${b.月份}',this.value)"></span>
+          <span class="明细金额"><span class="金额词">金额：</span><input id="损${转义(b.房号)}金额" type="number" class="抄表输入 钱数" value="${b.房间损耗 || ''}" placeholder="0" ${月份锁定(b.月份) ? 'disabled' : ''} onchange="改损耗('${转义(b.房号)}','${b.月份}',this.value)"></span>
         </div>
       </div>
 
@@ -991,7 +997,7 @@ async function 渲染总账单(el) {
       <button class="btn 次" onclick="汇总月份=加月('${月}',1);渲染()">次月</button>
       <button class="btn" onclick="显示全部账单()">全部账单</button>
     </div></div>
-    <div class="卡片"><h2>总账单（${月}）</h2>
+    <div class="卡片"><h2>总账单（${月}）${锁定徽章(月)}</h2>
       <div class="汇总网格">
         <div class="汇总项 收入"><div class="标签">月租总收</div><div class="数值">¥${数字(s.月租已收)}</div></div>
         <div class="汇总项 收入"><div class="标签">日租总收</div><div class="数值">¥${数字(s.日租已收)}</div></div>
@@ -1126,13 +1132,13 @@ async function 渲染月度账单明细(el) {
       : daily;
     const 合计 = (日租视图 === '表格' ? 表格数据 : daily).reduce((s, d) => s + (Number(d.金额) || 0), 0);
     const 筛选说明 = 有筛选 ? ` · 筛选${姓 ? ' 客人「' + 转义(姓) + '」' : ''}${房 ? ' 房号「' + 转义(房) + '」' : ''}（${表格数据.length} 条）` : '';
-    el.innerHTML += `<div class="卡片"><h2>日租（${日租搜索日 ? 中文日期(日租搜索日) : 中文年月(月)}${筛选说明}）　合计 ¥${数字(合计)}</h2>
+    el.innerHTML += `<div class="卡片"><h2>日租（${日租搜索日 ? 中文日期(日租搜索日) : 中文年月(月)}${筛选说明}）${锁定徽章(月)}　合计 ¥${数字(合计)}</h2>
       ${日租视图 === '表格' ? 日租表格(表格数据, 月, 日租搜索日, !有筛选) : 日租图表(daily, 月, 日租搜索日)}
     </div>`;
   } else {
     const 支出 = await api(`/api/transactions?month=${月}`);
     const 合计 = 支出.reduce((s, t) => s + (Number(t.金额) || 0), 0);
-    el.innerHTML += `<div class="卡片"><h2>支出（${月}）　合计 ¥${数字(合计)}</h2>
+    el.innerHTML += `<div class="卡片"><h2>支出（${月}）${锁定徽章(月)}　合计 ¥${数字(合计)}</h2>
       <div class="表格容器"><table><tr><th>日期</th><th>事项</th><th class="数字">金额</th></tr>
       ${支出.map(t => `<tr><td>${转义(t.日期)}</td><td>${转义(t.事项)}</td><td class="数字">¥${数字(t.金额)}</td></tr>`).join('')}
       ${支出.length?'':'<tr><td colspan="3" class="空">本月无支出</td></tr>'}</table></div></div>`;
@@ -1145,7 +1151,7 @@ function 月租表HTML(账单, 月, 只读) {
   const 应收 = 在租账单.reduce((s, b) => s + (b.应付租金 || 0), 0);
   const 实收 = 在租账单.reduce((s, b) => s + (b.实收 || 0) + (b.补缴 || 0) + (b.新收押金 || 0) + (b.预缴 || 0), 0);
   const 显示账单 = 账单状态筛选 === '全部' ? 账单 : 账单.filter(b => b.状态 === 账单状态筛选);
-  return `<div class="卡片"><h2>月租账单（${月}）　应付 ¥${数字(应收)}　已收 ¥${数字(实收)}</h2>
+  return `<div class="卡片"><h2>月租账单（${月}）${锁定徽章(月)}　应付 ¥${数字(应收)}　已收 ¥${数字(实收)}</h2>
     <div class="表格容器"><table><tr><th>房号</th><th>交租日期</th><th class="数字">房租</th><th class="数字">新收押金</th><th class="数字">管理费</th><th class="数字">水费</th><th class="数字">电费</th><th class="数字">欠费滚存</th><th class="数字">实收</th><th>状态</th>${只读 ? '' : '<th></th>'}</tr>
     ${显示账单.map(b => {
       const 未出租 = b.状态 === '未出租';
@@ -1598,10 +1604,12 @@ window.打开退房详情 = function(id) {
       ${对不上 ? `<div class="退租警告">⚠ 退还金额 ¥${数字(r.退入金额)} 与「应退 − 应扣」= ¥${数字(应退还)} 对不上，这是旧版本漏减水电费留下的老记录</div>` : ''}
     </div>
     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-      ${距今天数(r.日期) > 3
-        ? `<span style="color:var(--次文字);font-size:13px;margin-right:auto">退房已超过 3 天，不可撤销</span>`
-        : `<button class="btn 次" onclick="撤销退房(${r.id})">↩ 撤销退房</button>`}
-      ${启用删除 ? `<button class="btn 危险" onclick="删除退房(${r.id})">删除记录</button>` : ''}
+      ${月份锁定(r.日期)
+        ? `<span style="color:var(--次文字);font-size:13px;margin-right:auto">🔒 该月已锁定，不可修改（在设置里解锁后可编辑）</span>`
+        : (距今天数(r.日期) > 3
+          ? `<span style="color:var(--次文字);font-size:13px;margin-right:auto">退房已超过 3 天，不可撤销</span>`
+          : `<button class="btn 次" onclick="撤销退房(${r.id})">↩ 撤销退房</button>`)}
+      ${启用删除 && !月份锁定(r.日期) ? `<button class="btn 危险" onclick="删除退房(${r.id})">删除记录</button>` : ''}
       <button class="btn" onclick="请求关闭模态()">关闭</button>
     </div>`);
 };
@@ -1935,6 +1943,14 @@ async function 设置_参数() {
       </div>
       <p style="color:var(--次文字);font-size:13px;margin-top:8px">一键切月会先把本月固化进历史总账单，再把当前月份 +1。</p>
     </div>
+    ${(全局.月度快照 || []).length ? `<div class="卡片">
+      <h2>🔓 已锁定月份（${(全局.月度快照 || []).length}）</h2>
+      <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">切月后上月账单会锁死成快照，之后怎么改都不影响历史。要修正某个已锁定的月，先「解锁」，改完再「重新锁定」重新固化。</p>
+      <div class="表格容器"><table>
+        <tr><th>月份</th><th>锁定时间</th><th></th></tr>
+        ${(全局.月度快照 || []).slice().sort((a, b) => String(a.月份).localeCompare(String(b.月份))).map(k => `<tr><td><b>${转义(k.月份)}</b></td><td style="color:var(--次文字)">${转义((k.锁定时间 || '').slice(0, 10))}</td><td style="white-space:nowrap"><button class="btn 行内" onclick="解锁月('${转义(k.月份)}')">解锁</button><button class="btn 行内 次" onclick="锁定月('${转义(k.月份)}')">重新锁定</button></td></tr>`).join('')}
+      </table></div>
+    </div>` : ''}
     ${折叠卡片('房源', `<h2 style="margin:0">🏠 房源信息（${房源.length} 间）</h2>`, `<p style="color:var(--次文字);font-size:13px;margin-bottom:12px">这里是楼里全部房号的清单，总览空置房间、房间档案都以它为准；出租前先在此添加房源。在租/日租/自住房不能被删除。</p>` + 房源表)}
     <div class="卡片">
       <h2>💧 水电变量</h2>
@@ -2109,10 +2125,22 @@ window.保存设置 = async function() {
 // 一键切到下月（当前月份 +1）
 window.切下月 = async function() {
   const 当前月 = 全局.settings.当前月份;
-  await api('/api/settle', { method: 'POST', body: { 月份: 当前月 } }); // 固化本月到历史总账单
+  await api('/api/settle', { method: 'POST', body: { 月份: 当前月 } }); // 固化本月到历史总账单 + 账单明细快照
   const 下月 = 加月(当前月, 1);
-  const s = await api('/api/settings', { method: 'POST', body: { 当前月份: 下月 } });
-  全局.settings = s; 提示('已切到 ' + 下月); 渲染();
+  await api('/api/settings', { method: 'POST', body: { 当前月份: 下月 } });
+  全局 = await api('/api/all'); 提示('已切到 ' + 下月 + '，上月已锁定'); 渲染();
+};
+// 解锁某月：删掉快照，该月回到可编辑（设置 → 参数 → 已锁定月份）
+window.解锁月 = async function(月份) {
+  if (!(await 询问确认('解锁这个月？', `解锁 ${月份} 后，该月账单回到「现算、可编辑」状态，可以修改数据；改完记得「重新锁定」。`))) return;
+  await api('/api/unlock', { method: 'POST', body: { 月份 } });
+  全局 = await api('/api/all'); 提示(`已解锁 ${月份}`); 刷新设置详情();
+};
+// 重新锁定某月：按当前数据重算该月账单并固化成快照（不改变当前月份）
+window.锁定月 = async function(月份) {
+  if (!(await 询问确认('重新锁定这个月？', `会按当前数据重新计算 ${月份} 的账单，固化成快照并写入历史总账单。`))) return;
+  await api('/api/settle', { method: 'POST', body: { 月份 } });
+  全局 = await api('/api/all'); 提示(`已重新锁定 ${月份}`); 刷新设置详情();
 };
 window.添加房源 = async function() {
   const 房号 = document.getElementById('新房号').value.trim();

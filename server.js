@@ -196,7 +196,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 function 当前月份() { return 北京日期().slice(0, 7); }
 // 工资分段默认值：2024-03 起每月 4000（与历史口径一致，改动只影响之后新增的分段）
 function 默认工资分段() { return [{ 起始月份: '2024-03', 金额: 4000 }]; }
-function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段(), 钟点房默认价: 60, 空置脏房: [] }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 预缴记录: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
+function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段(), 钟点房默认价: 60, 空置脏房: [] }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 预缴记录: [], 月度快照: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
 // 某月工资 = 起始月份 ≤ 该月 的分段里，起始月份最大的那条；都不满足则 0；未来月份（没到当月）不发工资
 function 月工资(settings, 月份) {
   if (String(月份) > 当前月份()) return 0;
@@ -239,6 +239,7 @@ function 迁移(data) {
     if (!('房号' in d)) d.房号 = '';
   }
   if (!Array.isArray(data.备忘录)) data.备忘录 = []; // 备忘录：全局常驻，与月份无关
+  if (!Array.isArray(data.月度快照)) data.月度快照 = []; // 切月锁死：每月切月时固化的账单明细快照，见「切月锁死」相关注释
   // 日租房态：一间日租房一条，记「当前」住着谁 / 是不是脏房。daily 仍是账单唯一来源，这里只管房间状态
   if (!Array.isArray(data.日租房态)) data.日租房态 = [];
   if (!Array.isArray(data.日租清洁记录)) data.日租清洁记录 = [];
@@ -300,10 +301,13 @@ function 读数据() {
       // 预缴迁移：房间上还挂着老的 预缴金/管理费预缴金 → 这次读取会把它转成预缴记录，必须立刻落盘，
       // 否则记录 id 只活在内存里，前端拿到 id 去删除时对不上（下次读取又会重新生成一套 id）
       || (Array.isArray(有效.rooms) && 有效.rooms.some(房 => (Number(房.预缴金) || 0) > 0 || (Number(房.管理费预缴金) || 0) > 0))
-      || !Array.isArray(有效.预缴记录);
+      || !Array.isArray(有效.预缴记录)
+      || !Array.isArray(有效.月度快照);
     const data = 迁移(有效);
+    // 补历史月快照：把「已切月进历史总账单、但还没生成快照」的月补一份（老数据 2026-08 这类），幂等
+    const 补了快照 = 补快照(data);
     // 首次迁移（磁盘还没有房源表）或拆出了外壳时，立即写回纯数据、持久化
-    if (需写回 || 是外壳) 写数据(data);
+    if (需写回 || 是外壳 || 补了快照) 写数据(data);
     return data;
   } catch (e) { console.error('读取数据失败：', e.message); return 空数据(); }
 }
@@ -470,11 +474,95 @@ function 缺项(房) {
   return Object.entries(必填).filter(([k]) => 房[k] === '' || 房[k] == null).map(([, v]) => v);
 }
 
+// ============ 切月锁死（快照 + 写锁） ============
+// 目标：切月后，上月及更早的账单全部锁死成快照，后面怎么改都不影响历史。
+//   - 切月（/api/settle）时，把当月每间房「算好的账单明细」固化进 月度快照；
+//   - 读历史月（/api/bills、/api/history）直接读快照，不再现算；
+//   - 写接口对「已锁定月」一律拒绝，要改必须先解锁。
+// 为什么快照「生成账单的输出」而不是源数据：生成账单会读房间档案的当前租金/入住日/押金，
+//   以及 meters/预缴记录跨月滚动，现算的话改现在的东西会追溯影响历史月（坑 22）。快照输出就彻底解耦。
+function 锁定月集合(data) { return new Set((data.月度快照 || []).map(k => k.月份)); }
+function 月份已锁定(data, 月份) {
+  const m = String(月份 || '').slice(0, 7);
+  return !!m && 锁定月集合(data).has(m);
+}
+// 生成某月完整的「月度账单列表」：在租房的账单 + 空置房占位 + 已退房房（保留其核收/追缴）。与 /api/bills 口径一致。
+function 生成月度账单列表(data, 月份) {
+  const 列表 = data.rooms.filter(租客存在);
+  按房号排序(列表);
+  const 账单 = 列表.map(房 => 生成账单(data, 房, 月份));
+  const 在租房号 = new Set(列表.map(房 => 房.房号));
+  const 隐藏 = new Set(data.settings.隐藏房号 || []);
+  for (const h of data.房源) {
+    if (!在租房号.has(h.房号) && !隐藏.has(h.房号)) 账单.push({ 房号: h.房号, 租客: '', 状态: '未出租', 交租日: null });
+  }
+  for (const b of data.bills) {
+    if (b.月份 !== 月份 || 在租房号.has(b.房号)) continue;
+    账单.push({ 房号: b.房号, 租客: '', 状态: '已退房', 交租日: null, 交租日期: '', 房租: null, 管理费: null, 水费: null, 电费: null, 新收押金: 退房房新收押金(data, b.房号, 月份), 补缴: b.补缴 || 0, 结转: 0, 转下月: 0, 预缴: 0, 应付租金: null, 实收: b.实收 || 0, 欠款: 0, 可计算: false, 月份 });
+  }
+  按房号排序(账单);
+  return 账单;
+}
+// 取某房某月的账单行：锁定月读快照（找不到说明该房当月无账单），否则现算
+function 取月度账单行(data, 房, 月) {
+  if (月份已锁定(data, 月)) {
+    const 快照 = data.月度快照.find(k => k.月份 === 月);
+    if (快照) return 快照.账单.find(b => b.房号 === 房.房号 && b.状态 !== '未出租') || null;
+    return null;
+  }
+  return 生成账单(data, 房, 月);
+}
+// 某房退房后当月应收的「新收押金」：当月入住、后来退房的房，押金+房卡押金仍属于入住那个月的已收。
+// 退房后房号不在 rooms，得从退房记录的房间快照里补回来。
+function 退房房新收押金(data, 房号, 月份) {
+  const 记 = (data.退房记录 || []).find(r => r.房号 === 房号);
+  if (!记 || !记.房间快照) return 0;
+  const 入住月 = 记.房间快照.入住日 ? String(记.房间快照.入住日).slice(0, 7) : '';
+  if (入住月 !== 月份) return 0;
+  return (Number(记.房间快照.押金) || 0) + (Number(记.房间快照.房卡押金) || 0);
+}
+// 固化某月：算月租/日租/支出写进历史总账单，并把当月账单明细写进 月度快照（切月、重新锁定、补快照共用）
+function 固化月份(data, 月份) {
+  const 月租已收 = 算月已收(data, 月份);
+  const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
+  const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
+  let 记录 = data.历史总账单.find(h => h.月份 === 月份);
+  if (!记录) { 记录 = { 月份, 月租: 0, 日租: 0, 支出: 0 }; data.历史总账单.push(记录); }
+  记录.月租 = 舍入(月租已收); 记录.日租 = 舍入(日租已收); 记录.支出 = 舍入(支出);
+  let 快照 = data.月度快照.find(k => k.月份 === 月份);
+  if (!快照) { 快照 = { 月份, 锁定时间: new Date().toISOString(), 账单: [] }; data.月度快照.push(快照); }
+  快照.账单 = 生成月度账单列表(data, 月份);
+  return 记录;
+}
+// 补历史月快照：升级到本版时，把「历史总账单里、真实出现过数据、但还没有快照」的旧月一次性固化（如老数据 2026-08）。
+// 只在第一次读时跑一次（用 settings.已补快照 打标记），之后不再自动补——否则用户「解锁」某月后，下一次读又会把它自动锁回去。
+function 补快照(data) {
+  if (!Array.isArray(data.月度快照)) data.月度快照 = [];
+  if (data.settings.已补快照 === true) return false; // 已经迁移过，解锁后不自动重新锁定
+  const 已锁 = 锁定月集合(data);
+  const 实时月 = new Set();
+  for (const b of data.bills) if (b.月份) 实时月.add(b.月份);
+  for (const d of data.daily) if (d.日期) 实时月.add(String(d.日期).slice(0, 7));
+  for (const t of data.transactions) if (t.日期) 实时月.add(String(t.日期).slice(0, 7));
+  for (const h of (data.历史总账单 || [])) {
+    if (!实时月.has(h.月份) || 已锁.has(h.月份)) continue;
+    固化月份(data, h.月份);   // 会顺带把历史总账单旧值（如 2026-08 支出 20820.4 这种取整前旧值）刷新成当前正确值
+    已锁.add(h.月份);
+  }
+  data.settings.已补快照 = true;
+  return true; // 第一次跑：补快照 + 打标记，写回一次；之后不再自动补
+}
+
 // ============ API ============
 app.get('/api/all', (req, res) => res.json(读数据()));
 app.post('/api/settings', (req, res) => {
   const data = 读数据();
   const 补丁 = Object.assign({}, req.body);
+  // 当前月份不能设回「已锁定」的月：锁定月只读，要编辑得先在设置里解锁（否则总览等页会现出改不动的按钮）
+  if ('当前月份' in 补丁) {
+    const 目标月 = String(补丁.当前月份 || '').slice(0, 7);
+    if (目标月 && 月份已锁定(data, 目标月)) return res.status(400).json({ 错误: `月份 ${目标月} 已锁定，如需编辑请先在「设置 → 参数 → 已锁定月份」里解锁` });
+  }
   // 水电单价存进来必须是大于 0 的数字：存成空串/文字会让 房水价() 退化成 0，整月水电费白算
   for (const 键 of ['水价', '电价']) {
     if (!(键 in 补丁)) continue;
@@ -653,6 +741,7 @@ app.post('/api/prepay', (req, res) => {
   if (金额 <= 0) return res.status(400).json({ 错误: '预缴金额需大于 0' });
   const 类型 = req.body.类型 === '管理费' ? '管理费' : '房租';
   const 月份 = String(req.body.月份 || data.settings.当前月份).slice(0, 7);
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `预缴起抵月（${月份}）已锁定，如需修改请先在设置里解锁` });
   // 早于入住月的预缴算不进当前租客，直接挡掉，免得录进去却看不到效果
   const 起始 = 预缴起始月(data, 房);
   if (月份 < 起始) return res.status(400).json({ 错误: `预缴月份不能早于入住月 ${起始}` });
@@ -665,6 +754,7 @@ app.delete('/api/prepay/:id', (req, res) => {
   const data = 读数据();
   const 条 = data.预缴记录.find(p => p.id == req.params.id);
   if (!条) return res.status(404).json({ 错误: '预缴记录不存在' });
+  if (月份已锁定(data, 条.月份)) return res.status(400).json({ 错误: `该笔预缴的起抵月（${String(条.月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   data.预缴记录 = data.预缴记录.filter(p => p.id != req.params.id);
   写数据(data);
   const 房 = data.rooms.find(r => r.房号 === 条.房号);
@@ -675,6 +765,7 @@ app.delete('/api/prepay/:id', (req, res) => {
 app.post('/api/checkout', (req, res) => {
   const data = 读数据();
   const { 房号, 日期, 上月水底, 上月电底, 退房水底, 退房电底, 退房卫生费, 房间损耗, 损耗说明, 退押金, 退房卡押金, 留存金额, 电话, 身份证, 备注 } = req.body;
+  if (月份已锁定(data, 日期 || 今天())) return res.status(400).json({ 错误: '该退房日期所在月已锁定，如需修改请先在设置里解锁' });
   const 房 = data.rooms.find(r => r.房号 === 房号);
   if (!房) return res.status(404).json({ 错误: '房间不存在' });
   // 押金/房卡押金：复选框勾选才退（默认勾选）；留存金额：预缴房间退房时的剩余预缴金
@@ -748,6 +839,7 @@ app.post('/api/checkouts/undo/:id', (req, res) => {
   const i = data.退房记录.findIndex(r => r.id == req.params.id);
   if (i < 0) return res.status(404).json({ 错误: '退房记录不存在' });
   const 记录 = data.退房记录[i];
+  if (月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该退房记录所在月已锁定，如需修改请先在设置里解锁' });
   // 老版本退房没存快照（房间档案随退房一起删了），恢复不出月租金/管理费/入住日，只能人工重建
   if (!记录.房间快照) return res.status(400).json({ 错误: `这条退房记录是旧版本写的，没保存「${记录.房号}」退房前的房间档案（月租金、管理费、入住日等），无法自动恢复成在租。请去「房间档案 → 添加租户」手动把 ${记录.房号} 建回来，再删掉这条退房记录。` });
   // 退房超过 3 天不再允许撤销（防止旧账被误动，也避免拿错流水）
@@ -759,7 +851,12 @@ app.post('/api/checkouts/undo/:id', (req, res) => {
   写数据(data);
   res.json({ ok: true, 房号: 记录.房号 });
 });
-app.delete('/api/checkouts/:id', (req, res) => { const data = 读数据(); data.退房记录 = data.退房记录.filter(r => r.id != req.params.id); 写数据(data); res.json({ ok: true }); });
+app.delete('/api/checkouts/:id', (req, res) => {
+  const data = 读数据();
+  const 记录 = data.退房记录.find(r => r.id == req.params.id);
+  if (记录 && 月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该退房记录所在月已锁定，如需修改请先在设置里解锁' });
+  data.退房记录 = data.退房记录.filter(r => r.id != req.params.id); 写数据(data); res.json({ ok: true });
+});
 
 // 抄表
 app.get('/api/meters', (req, res) => {
@@ -778,6 +875,7 @@ app.post('/api/meters', (req, res) => {
     const 日 = Number(String(房.入住日).slice(8, 10));
     if (日) 抄表日期 = `${data.settings.当前月份}-${String(日).padStart(2, '0')}`;
   }
+  if (月份已锁定(data, 抄表日期)) return res.status(400).json({ 错误: `该抄表日期所在月（${String(抄表日期).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   // 上月水表/电表：水电抄表页允许手动改「上月底度」，改了就连同本月读数一起存，算用量时优先用它
   const 记录 = { id: 新id(data.meters), 日期: 抄表日期, 房号, 水表, 电表, 上月水表: 上月水表 ?? '', 上月电表: 上月电表 ?? '' };
   data.meters.push(记录); 写数据(data); res.json(记录);
@@ -786,6 +884,7 @@ app.post('/api/meters', (req, res) => {
 app.delete('/api/meters/undo', (req, res) => {
   const data = 读数据();
   const { 房号, 月份 } = req.query;
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 该房本月 = data.meters.filter(m => m.房号 === 房号 && (m.日期 || '').startsWith(月份));
   if (!该房本月.length) return res.status(404).json({ 错误: '无抄表记录' });
   const 最后 = 该房本月[该房本月.length - 1];
@@ -793,7 +892,12 @@ app.delete('/api/meters/undo', (req, res) => {
   写数据(data);
   res.json({ ok: true });
 });
-app.delete('/api/meters/:id', (req, res) => { const data = 读数据(); data.meters = data.meters.filter(m => m.id != req.params.id); 写数据(data); res.json({ ok: true }); });
+app.delete('/api/meters/:id', (req, res) => {
+  const data = 读数据();
+  const 记录 = data.meters.find(m => m.id == req.params.id);
+  if (记录 && 月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该抄表所在月已锁定，如需修改请先在设置里解锁' });
+  data.meters = data.meters.filter(m => m.id != req.params.id); 写数据(data); res.json({ ok: true });
+});
 app.get('/api/meters/missing', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
   const 未抄 = data.rooms.filter(租客存在).filter(房 => !data.meters.some(m => m.房号 === 房.房号 && (m.日期 || '').startsWith(月份))).map(房 => {
@@ -815,32 +919,32 @@ app.get('/api/bills', (req, res) => {
   按房号排序(列表);
   let 账单;
   if (全部) {
-    // 房号搜索「全部」：列出该房号在所有涉及月份（bills 出现过的 + 当前月份）的账单
+    // 房号搜索「全部」：列出该房号在所有涉及月份（bills 出现过的 + 当前月份）的账单；锁定月读快照
     const 月集合 = new Set([月份]);
     for (const b of data.bills) if (!房号 || String(b.房号).includes(房号)) 月集合.add(b.月份);
     账单 = [];
-    for (const 房 of 列表) for (const 月 of [...月集合].sort()) 账单.push(生成账单(data, 房, 月));
-  } else {
-    账单 = 列表.map(房 => 生成账单(data, 房, 月份));
-    // 无房号、无日筛选（月度账单）时补充空置房（状态「未出租」）和已退房房（状态「已退房」）
-    if (!日 && !房号) {
-      const 在租房号 = new Set(列表.map(房 => 房.房号));
-      const 隐藏 = new Set(data.settings.隐藏房号 || []);
-      for (const h of data.房源) {
-        if (!在租房号.has(h.房号) && !隐藏.has(h.房号)) 账单.push({ 房号: h.房号, 租客: '', 状态: '未出租', 交租日: null });
-      }
-      // 已退房房：房号已不在 rooms，但当月 bills 里还留着核收/追缴，补一行让「已收」不缩水
-      for (const b of data.bills) {
-        if (b.月份 !== 月份 || 在租房号.has(b.房号)) continue;
-        账单.push({ 房号: b.房号, 租客: '', 状态: '已退房', 交租日: null, 交租日期: '', 房租: null, 管理费: null, 水费: null, 电费: null, 新收押金: 0, 补缴: b.补缴 || 0, 结转: 0, 转下月: 0, 预缴: 0, 应付租金: null, 实收: b.实收 || 0, 欠款: 0, 可计算: false, 月份 });
-      }
-      按房号排序(账单);
+    for (const 房 of 列表) for (const 月 of [...月集合].sort()) {
+      const 行 = 取月度账单行(data, 房, 月);
+      if (行) 账单.push(行);
     }
+  } else if (月份已锁定(data, 月份)) {
+    // 锁定月：直接读快照（快照里已含空置/已退房占位行，按房号排序好了）
+    账单 = (data.月度快照.find(k => k.月份 === 月份) || {}).账单 || [];
+    if (房号 || 日) 账单 = 账单.filter(b => b.状态 !== '未出租' && b.状态 !== '已退房');
+    if (房号) 账单 = 账单.filter(b => String(b.房号 || '').includes(房号));
+    if (日) 账单 = 账单.filter(b => b.交租日 === 日);
+  } else if (!日 && !房号) {
+    // 现算月、无筛选：完整月度账单列表（含空置/已退房占位行）
+    账单 = 生成月度账单列表(data, 月份);
+  } else {
+    // 现算月、按房号/交租日筛选：只列在租命中房间，不补占位行
+    账单 = 列表.map(房 => 生成账单(data, 房, 月份));
   }
   res.json(账单);
 });
 app.post('/api/bills/collect', (req, res) => {
   const data = 读数据(); const { 房号, 月份, 实收, 强制, 平账, 房间损耗, 损耗说明, 收款日期 } = req.body;
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   let 记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
   if (!记录) { 记录 = { id: 新id(data.bills), 房号, 月份, 房间损耗: 0, 损耗说明: '', 实收: 0, 强制: false, 平账: false, 收款日期: '' }; data.bills.push(记录); }
   if (实收 !== undefined) 记录.实收 = Number(实收) || 0;
@@ -855,6 +959,7 @@ app.post('/api/bills/collect', (req, res) => {
 app.post('/api/bills/arrears', (req, res) => {
   const data = 读数据();
   const { 房号, 月份, 金额 } = req.body;
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 补缴金额 = Number(金额) || 0;
   if (补缴金额 <= 0) return res.status(400).json({ 错误: '追缴金额需大于 0' });
   let 本月 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
@@ -868,6 +973,7 @@ app.post('/api/bills/arrears', (req, res) => {
 app.post('/api/bills/carry', (req, res) => {
   const data = 读数据();
   const { 房号, 月份, 金额 } = req.body;
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 房 = data.rooms.find(r => r.房号 === 房号);
   if (!房) return res.status(404).json({ 错误: '房间不存在' });
   const 本月账单 = 生成账单(data, 房, 月份);
@@ -894,6 +1000,7 @@ app.post('/api/bills/carry', (req, res) => {
 app.delete('/api/bills', (req, res) => {
   const data = 读数据();
   const { 房号, 月份 } = req.query;
+  if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
   if (!记录) return res.json({ ok: true });
   // 本月若滚存过（转下月 > 0），下月的结转要同步减掉，否则删了本月、下月还凭空多一笔
@@ -917,8 +1024,18 @@ app.get('/api/daily', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
   res.json(data.daily.filter(d => (d.日期 || '').startsWith(月份)).sort((a, b) => (a.日期 || '').localeCompare(b.日期 || '')));
 });
-app.post('/api/daily', (req, res) => { const data = 读数据(); const 记录 = { id: 新id(data.daily), ...req.body, 入住天数: Number(req.body.入住天数) || 1 }; data.daily.push(记录); 写数据(data); res.json(记录); });
-app.delete('/api/daily/:id', (req, res) => { const data = 读数据(); data.daily = data.daily.filter(d => d.id != req.params.id); 写数据(data); res.json({ ok: true }); });
+app.post('/api/daily', (req, res) => {
+  const data = 读数据();
+  if (月份已锁定(data, req.body.日期)) return res.status(400).json({ 错误: '该日期所在月已锁定，如需修改请先在设置里解锁' });
+  const 记录 = { id: 新id(data.daily), ...req.body, 入住天数: Number(req.body.入住天数) || 1 };
+  data.daily.push(记录); 写数据(data); res.json(记录);
+});
+app.delete('/api/daily/:id', (req, res) => {
+  const data = 读数据();
+  const 记录 = data.daily.find(d => d.id == req.params.id);
+  if (记录 && 月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该日租账单所在月已锁定，如需修改请先在设置里解锁' });
+  data.daily = data.daily.filter(d => d.id != req.params.id); 写数据(data); res.json({ ok: true });
+});
 
 // ============ 日租房态（EBK 房态图：空闲 → 在住 → 脏房 → 空闲） ============
 // 账单口径不变：daily 仍是日租收入的唯一来源，办入住时写一条，退房/清洁只改房间状态、不动钱。
@@ -1035,6 +1152,7 @@ app.post('/api/roomstatus/delete-record', (req, res) => {
   const id = Number(req.body.id);
   const 记录 = data.daily.find(d => d.id === id);
   if (!记录) return res.status(400).json({ 错误: '这条记录已经不在了，刷新一下' });
+  if (月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该日租记录所在月已锁定，如需修改请先在设置里解锁' });
   data.daily = data.daily.filter(d => d.id !== id);
   const 态 = data.日租房态.find(x => x.日租id === id);
   if (态) 清空房态(态);
@@ -1050,6 +1168,7 @@ app.post('/api/roomstatus/checkin', (req, res) => {
   if (态.状态 === '在住') return res.status(400).json({ 错误: `${房号} 正在住人，请先退房` });
   if (态.状态 === '脏房') return res.status(400).json({ 错误: `${房号} 还是脏房，请先确认清洁` });
   const 入住日 = String(req.body.入住日 || '').slice(0, 10) || 营业日();   // 凌晨办的入住算前一天
+  if (月份已锁定(data, 入住日)) return res.status(400).json({ 错误: `该入住日所在月（${String(入住日).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 钟点 = req.body.房型 === '钟点';
   const 时长小时 = 钟点 ? Math.max(0.5, Number(req.body.时长小时) || 3) : 0;   // 钟点房默认 3 小时，可改
   const 天数 = 钟点 ? 1 : Math.max(1, Number(req.body.天数) || 1);            // 钟点房在账单里按 1 个单元记
@@ -1087,6 +1206,7 @@ app.post('/api/roomstatus/extend', (req, res) => {
   const data = 读数据();
   const 态 = 取房态(data, String(req.body.房号 || '').trim());
   if (!态 || 态.状态 !== '在住') return res.status(400).json({ 错误: '该房间当前没有在住客人' });
+  if (月份已锁定(data, 态.入住日)) return res.status(400).json({ 错误: '该房入住的账单所在月已锁定，如需修改请先在设置里解锁' });
   const 钟点 = 态.房型 === '钟点';
   const 天数 = 钟点 ? 1 : Math.max(1, Number(req.body.天数) || 1);
   const 金额 = 读金额(req.body.金额);
@@ -1135,6 +1255,7 @@ app.post('/api/roomstatus/undo-checkin', (req, res) => {
   const data = 读数据();
   const 态 = 取房态(data, String(req.body.房号 || '').trim());
   if (!态 || 态.状态 === '空闲') return res.status(400).json({ 错误: '该房间没有可撤销的入住' });
+  if (月份已锁定(data, 态.入住日)) return res.status(400).json({ 错误: '该房入住的账单所在月已锁定，如需修改请先在设置里解锁' });
   const 删了 = 态.日租id != null && data.daily.some(d => d.id === 态.日租id);
   if (删了) data.daily = data.daily.filter(d => d.id !== 态.日租id);
   清空房态(态);
@@ -1171,8 +1292,18 @@ app.get('/api/transactions', (req, res) => {
   const data = 读数据(); const 月份 = req.query.month || data.settings.当前月份;
   res.json(data.transactions.filter(t => (t.日期 || '').startsWith(月份)).sort((a, b) => (a.日期 || '').localeCompare(b.日期 || '')));
 });
-app.post('/api/transactions', (req, res) => { const data = 读数据(); const 记录 = { id: 新id(data.transactions), ...req.body }; data.transactions.push(记录); 写数据(data); res.json(记录); });
-app.delete('/api/transactions/:id', (req, res) => { const data = 读数据(); data.transactions = data.transactions.filter(t => t.id != req.params.id); 写数据(data); res.json({ ok: true }); });
+app.post('/api/transactions', (req, res) => {
+  const data = 读数据();
+  if (月份已锁定(data, req.body.日期)) return res.status(400).json({ 错误: '该日期所在月已锁定，如需修改请先在设置里解锁' });
+  const 记录 = { id: 新id(data.transactions), ...req.body };
+  data.transactions.push(记录); 写数据(data); res.json(记录);
+});
+app.delete('/api/transactions/:id', (req, res) => {
+  const data = 读数据();
+  const 记录 = data.transactions.find(t => t.id == req.params.id);
+  if (记录 && 月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该支出所在月已锁定，如需修改请先在设置里解锁' });
+  data.transactions = data.transactions.filter(t => t.id != req.params.id); 写数据(data); res.json({ ok: true });
+});
 
 // 备忘录（全局常驻，与月份无关；未完成排前面，同组内新的在上）
 function 备忘录排序(list) { return [...list].sort((a, b) => (a.完成 ? 1 : 0) - (b.完成 ? 1 : 0) || b.id - a.id); }
@@ -1223,6 +1354,14 @@ function 离租房已收(data, 月份) {
     if (在租.has(b.房号)) continue;
     合计 += (b.实收 || 0) + (b.补缴 || 0);
   }
+  // 新收押金：当月入住、后来退房的房间，押金+房卡押金也属于该月已收。
+  // 退房后房号不在 rooms，得从退房记录的房间快照里补回来（否则 705 这种 8 月入住、9 月退房的房，押金会凭空从 8 月月租里消失）。
+  for (const r of (data.退房记录 || [])) {
+    const 快照 = r.房间快照 || {};
+    const 入住月 = 快照.入住日 ? String(快照.入住日).slice(0, 7) : '';
+    if (入住月 !== 月份) continue;
+    合计 += (Number(快照.押金) || 0) + (Number(快照.房卡押金) || 0);
+  }
   return 合计;
 }
 
@@ -1247,15 +1386,17 @@ app.get('/api/history', (req, res) => {
   for (const d of data.daily) if (d.日期) 实时月.add(String(d.日期).slice(0, 7));
   for (const t of data.transactions) if (t.日期) 实时月.add(String(t.日期).slice(0, 7));
   res.json((data.历史总账单 || []).map(h => {
-    const 实时 = 实时月.has(h.月份);
-    // 支出：写死月份（2024-03 起）的支出字段里含了工资 4000，要减出来；实时月份（8 月起）的支出来自流水、本就不含工资，不减
-    const 支出原始 = 实时
+    const 有实时数据 = 实时月.has(h.月份);
+    // 现算：只有「有实时数据且未锁定」的月才现算（解锁中/正在修正的月）；锁定月与写死月都读固化值
+    const 现算 = 有实时数据 && !月份已锁定(data, h.月份);
+    // 支出：写死月份（2024-03 起，无实时数据）的支出字段里含了工资 4000，要减出来；有实时数据的月支出来自流水、本就不含工资，不减
+    const 支出原始 = 现算
       ? 舍入(data.transactions.filter(t => (t.日期 || '').startsWith(h.月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0))
-      : (h.支出 || 0) - (h.月份 >= '2024-03' ? 4000 : 0);
+      : (h.支出 || 0) - (有实时数据 ? 0 : (h.月份 >= '2024-03' ? 4000 : 0));
     return {
       月份: h.月份,
-      月租总收: 实时 ? 算月已收(data, h.月份) : (h.月租 || 0),
-      日租总收: 实时 ? 舍入(data.daily.filter(d => (d.日期 || '').startsWith(h.月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0)) : (h.日租 || 0),
+      月租总收: 现算 ? 算月已收(data, h.月份) : (h.月租 || 0),
+      日租总收: 现算 ? 舍入(data.daily.filter(d => (d.日期 || '').startsWith(h.月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0)) : (h.日租 || 0),
       支出原始,
       工资: 月工资(data.settings, h.月份)
     };
@@ -1302,18 +1443,23 @@ app.post('/api/vacant/toggle', (req, res) => {
   res.json({ 房号, 脏: i < 0 });
 });
 
-// 固化月度总账单：把某月总账单写入历史总账单（切月时调用）
+// 固化月度总账单：把某月总账单写入历史总账单 + 固化账单明细快照（切月时调用，也可用于「重新锁定某月」）
 app.post('/api/settle', (req, res) => {
   const data = 读数据();
   const 月份 = req.body.月份 || data.settings.当前月份;
-  const 月租已收 = 算月已收(data, 月份);
-  const 日租已收 = data.daily.filter(d => (d.日期 || '').startsWith(月份)).reduce((s, d) => s + (Number(d.金额) || 0), 0);
-  const 支出 = data.transactions.filter(t => (t.日期 || '').startsWith(月份)).reduce((s, t) => s + (Number(t.金额) || 0), 0);
-  let 记录 = data.历史总账单.find(h => h.月份 === 月份);
-  if (!记录) { 记录 = { 月份, 月租: 0, 日租: 0, 支出: 0 }; data.历史总账单.push(记录); }
-  记录.月租 = 舍入(月租已收); 记录.日租 = 舍入(日租已收); 记录.支出 = 舍入(支出);
+  const 记录 = 固化月份(data, 月份);
   写数据(data);
   res.json(记录);
+});
+// 解锁某月：删掉该月快照，该月回到「现算、可编辑」状态（改完再切月/重新锁定即可再次固化）
+app.post('/api/unlock', (req, res) => {
+  const data = 读数据();
+  const 月份 = String(req.body.月份 || '').slice(0, 7);
+  if (!月份) return res.status(400).json({ 错误: '缺少月份' });
+  const 前 = data.月度快照.length;
+  data.月度快照 = data.月度快照.filter(k => k.月份 !== 月份);
+  写数据(data);
+  res.json({ ok: true, 已解锁: 前 > data.月度快照.length, 月份 });
 });
 
 // 导出完整备份：把 数据.json + 登录凭据.json + 客人档案.json 合并成一个文件（带类型标记，导入时自动拆回三份）
