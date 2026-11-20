@@ -383,6 +383,7 @@ window.确认欠费滚存 = async function(房号) {
 let 备忘缓存 = [];            // 本地缓存，勾选/切模式时直接重绘，不用每次都请求后端
 let 备忘删除模式 = false;      // 默认关闭：平时不显示删除图标，防手机误触
 const 备忘选中 = new Set();    // 删除模式下多选的 id
+let 备忘展开 = new Set();      // 展开显示全文的备忘 id（长内容点开/收起）
 
 function 备忘录卡片(列表) {
   if (!Array.isArray(列表)) return '<div class="卡片"><h2 style="margin:0">📝 备忘录</h2><div class="空">备忘录加载失败，刷新页面重试（服务端可能未重启）</div></div>';
@@ -391,16 +392,25 @@ function 备忘录卡片(列表) {
   const 标题 = `<h2 style="margin:0">📝 备忘录</h2>
     <span class="备忘待办数" id="备忘待办数" style="${待办 ? '' : 'display:none'}">${待办} 条待办</span>`;
   const 内容 = `<div class="备忘输入行">
-      <input id="备忘输入" placeholder="记点什么…（回车添加）" maxlength="200" onkeydown="if(event.key==='Enter'&&!event.isComposing)添加备忘()">
+      <textarea id="备忘输入" rows="2" placeholder="记点什么…（Ctrl+回车 或点 +添加）" onkeydown="if(event.key==='Enter'&&event.ctrlKey&&!event.isComposing)添加备忘()"></textarea>
       <button class="btn" onclick="添加备忘()">+ 添加</button>
     </div>
     <div id="备忘列表">${备忘录列表HTML(列表)}</div>`;
   return 折叠卡片('备忘录', 标题, 内容);
 }
+function 备忘内容HTML(m) {
+  const 内容 = m.内容 || '';
+  const 需要折叠 = 内容.includes('\n') || 内容.length > 40; // 多行/长内容才折叠，短内容整条直接显示
+  if (!需要折叠) return `<span class="备忘内容">${转义(内容)}</span>`;
+  if (备忘展开.has(m.id)) return `<span class="备忘内容 备忘展开" onclick="切换备忘展开(${m.id})" title="点击收起">${转义(内容)}\n<span class="备忘折叠标">▴ 收起</span></span>`;
+  const 预览 = 内容.split('\n')[0].slice(0, 40) + '…';
+  return `<span class="备忘内容 备忘可折叠" onclick="切换备忘展开(${m.id})" title="点击展开全文">${转义(预览)} <span class="备忘折叠标">▾ 展开</span></span>`;
+}
+window.切换备忘展开 = function(id) { 备忘展开.has(id) ? 备忘展开.delete(id) : 备忘展开.add(id); 重绘备忘列表(); };
 function 备忘录列表HTML(列表) {
-  const 行 = 列表.map(m => `<div class="备忘项${m.完成 ? ' 已完成' : ''}">
+  const 行 = 列表.map(m => `<div class="备忘项${m.完成 ? ' 已完成' : ''}${备忘展开.has(m.id) ? ' 备忘项展开' : ''}">
       <input type="checkbox" class="备忘勾" ${m.完成 ? 'checked' : ''} onchange="切换备忘完成(${m.id}, this.checked)" title="标记完成">
-      <span class="备忘内容">${转义(m.内容)}</span>
+      ${备忘内容HTML(m)}
       <span class="备忘日期">${转义((m.日期 || '').slice(5))}</span>
       ${备忘删除模式 ? `<input type="checkbox" class="备忘选择" ${备忘选中.has(m.id) ? 'checked' : ''} onchange="备忘选中切换(${m.id}, this.checked)" title="选中以批量删除">
       <button class="btn 行内 危险" onclick="删除备忘(${m.id})" title="删除这条">🗑</button>` : ''}
@@ -916,6 +926,10 @@ async function 渲染租客账单(容器) {
     const 未抄 = b.状态 === '未交' && !b.可计算;
     const 免算 = b.当月新租 && b.本月水底 == null; // 当月新租且无本月抄表：水电免算
     const 水电可用 = !未抄 && !免算; // 有抄表读数才显示水电底度明细
+    const 结转 = Number(b.结转) || 0;       // 上月滚存进来的拖欠（原值，不动）
+    const 补缴 = Number(b.补缴) || 0;       // 本月追缴补收（只冲欠款，不动应付口径）
+    const 已追缴结转 = Math.min(结转, 补缴);  // 结转里已被追缴清掉的部分
+    const 结转剩余 = 结转 - 已追缴结转;       // 结转里还没追缴清的部分
     return `<div class="账单卡">
       <div class="账单卡头">
         <b class="头日期">${中文日期(b.交租日期)}</b>
@@ -949,8 +963,8 @@ async function 渲染租客账单(容器) {
         <span>水费 <b>${水电可用 ? '¥' + 数字(b.水费) : '—'}</b></span>
         <span>电费 <b>${水电可用 ? '¥' + 数字(b.电费) : '—'}</b></span>
         <span>其它 <b>¥${数字(b.房间损耗)}</b></span>
-        ${b.结转 ? `<span>上月结转 <b>¥${数字(b.结转)}</b></span>` : ''}
-        <span class="应付"><span class="金额词">应付：</span><b class="钱数">${未抄 ? '—' : '¥' + 数字(b.应付租金)}</b></span>
+        ${结转 ? `<span>上月结转 <b>¥${数字(结转)}</b>${已追缴结转 >= 结转 ? ' <span class="已追缴">✔ 已追缴</span>' : (已追缴结转 > 0 ? ` <span class="已追缴">已追缴 ¥${数字(已追缴结转)}，尚欠 ¥${数字(结转剩余)}</span>` : '')}</span>` : ''}
+        <span class="应付"><span class="金额词">应付：</span><b class="钱数">${未抄 ? '—' : '¥' + 数字((Number(b.应付租金) || 0) - 已追缴结转)}</b></span>
       </div>
 
       ${未抄 ? '<div class="账单底度">水电未抄，无法计算</div>' : ''}
