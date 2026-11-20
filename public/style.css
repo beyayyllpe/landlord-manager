@@ -284,15 +284,33 @@ th.数字 { text-align: right; }
 .备忘勾 { flex: 0 0 auto; width: 18px; height: 18px; cursor: pointer; }
 .备忘选择 { flex: 0 0 auto; width: 18px; height: 18px; cursor: pointer; accent-color: var(--红); }
 .备忘内容 { flex: 1; min-width: 0; font-size: 15px; word-break: break-word; }
-.备忘内容.备忘可折叠 { cursor: pointer; }
-.备忘内容.备忘展开 { white-space: pre-wrap; cursor: pointer; }
-.备忘折叠标 { color: var(--主色); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.备忘内容.备忘可折叠 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.备忘内容.备忘展开 { white-space: normal; }
+.备忘折叠钮 { flex: 0 0 auto; background: none; border: none; color: var(--主色); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; white-space: nowrap; }
 .备忘项展开 { align-items: flex-start; }
 .备忘项展开 .备忘勾 { margin-top: 3px; }
 .备忘日期 { color: var(--次文字); font-size: 13px; white-space: nowrap; }
 .备忘项.已完成 .备忘内容 { text-decoration: line-through; color: var(--次文字); }
+/* 备忘录 Markdown 渲染样式 */
+.备忘内容 h1, .备忘内容 h2, .备忘内容 h3, .备忘内容 h4 { margin: 6px 0 4px; font-size: 1.05em; font-weight: 700; }
+.备忘内容 p { margin: 4px 0; }
+.备忘内容 ul, .备忘内容 ol { margin: 4px 0; padding-left: 20px; }
+.备忘内容 code { background: var(--灰); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace; font-size: 13px; }
+.备忘内容 pre { background: var(--灰); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+.备忘内容 pre code { background: none; padding: 0; }
+.备忘内容 a { color: var(--主色); }
+.备忘内容 strong { font-weight: 700; }
+.备忘内容 del { color: var(--次文字); }
 .备忘底栏 { margin-top: 10px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .备忘全选 { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--次文字); cursor: pointer; }
+
+/* 总览「待发送账单」卡片 */
+.待发送列表 { display: flex; flex-direction: column; gap: 8px; }
+.待发送行 { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--灰); border-radius: 8px; }
+.待发送主 { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.待发送主 b { font-size: 16px; }
+.待发送租客 { color: var(--次文字); font-size: 13px; }
+.待发送日 { color: var(--文字); font-size: 14px; font-weight: 600; white-space: nowrap; }
 
 /* 日租账单的空白日：没客人的那天也占一行，视觉上淡一点 */
 tr.空白日 td { color: var(--次文字); opacity: .55; }

@@ -260,6 +260,8 @@ async function 渲染总览(容器) {
   const 月份 = 全局.settings.当前月份;
   // 备忘录接口单独兜底：它挂了只少一张卡片，不能把整个总览带崩（历史教训：前端已更新、后端没重启时整页空白）
   const [s, 备忘] = await Promise.all([api(`/api/summary?month=${月份}`), api('/api/memos').catch(() => null)]);
+  const 待发送们 = (s.欠费 || []).filter(b => b.待发送);   // 抄了水电、还没发账单的房
+  const 欠款们 = (s.欠费 || []).filter(b => !b.待发送);    // 正常的未交/欠款房
   容器.innerHTML = `
     <div class="卡片">
       <h2>当月总收支（${月份}）</h2>
@@ -273,11 +275,21 @@ async function 渲染总览(容器) {
     </div>
     ${备忘录卡片(备忘)}
     ${s.数据不齐.length ? `<div class="卡片"><h3>🔔 数据不齐（${s.数据不齐.length}）</h3><div class="表格容器"><table><tr><th>房号</th><th>缺失项</th></tr>${s.数据不齐.map(x => `<tr><td><b>${转义(x.房号)}</b></td><td style="color:var(--红)">缺：${x.缺失.join('、')}</td></tr>`).join('')}</table></div></div>` : ''}
+    ${待发送们.length ? `<div class="卡片">
+      <h3>📤 待发送账单（${待发送们.length}）</h3>
+      <div class="待发送列表">${待发送们.map(b => `
+        <div class="待发送行">
+          <div class="待发送主"><b>${转义(b.房号)}</b><span class="待发送租客">${转义(b.租客 || '')}</span></div>
+          <div class="待发送日">${中文日期(b.交租日期)}</div>
+          <button class="btn 行内 成功" onclick="发送跳转('${转义(b.房号)}','${转义(b.交租日期 || '')}')">发送</button>
+        </div>`).join('')}</div>
+      <p style="color:var(--次文字);font-size:13px;margin:8px 0 0">点「发送」跳到租客账单，把账单截图发给租客后，在账单下方点「发送账单」标记已发送。</p>
+    </div>` : ''}
     <div class="卡片">
-      <h3>💰 状态（${s.欠费.length}）</h3>
-      ${s.欠费.length ? `<div class="表格容器"><table>
+      <h3>💰 状态（${欠款们.length}）</h3>
+      ${欠款们.length ? `<div class="表格容器"><table>
         <tr><th>房号</th><th>租客</th><th class="数字">应付租金</th><th class="数字">实收</th><th>状态</th><th class="数字">欠款</th><th></th></tr>
-        ${s.欠费.map(b => {
+        ${欠款们.map(b => {
           const 未抄 = !b.可计算;                          // 真·未抄表：本月费用算不出（应付租金为 null）
           const 有结转 = (b.结转 || 0) > 0;                 // 上月欠费滚存转入
           const 可操作 = b.可计算 || 有结转;                // 已抄表 或 有欠费滚存转入 → 都能核收/追缴
@@ -379,6 +391,22 @@ window.确认欠费滚存 = async function(房号) {
   if (r.错误) { 提示(r.错误); return; }
   提示('已欠费滚存'); 关闭模态(); 渲染();
 };
+// 待发送账单：点「发送」跳到租客账单这间房、这个交租日的账单（方便截图发租客）
+window.发送跳转 = function(房号, 交租日期) {
+  账单搜索房号 = 房号;
+  账单搜索范围 = '本月';
+  账单日期 = 交租日期 || 今天();
+  当前页 = '账单';
+  document.querySelectorAll('.导航 button').forEach(b => b.classList.toggle('激活', b.dataset.page === '账单'));
+  渲染();
+};
+// 标记账单已发送给租客（租客账单页账单卡下方的「发送账单」按钮）
+window.标记已发送 = async function(房号, 月份) {
+  if (!(await 询问确认('确认发送账单？', `${转义(房号)}　${月份} 账单标记为已发送给租客`))) return;
+  const r = await api('/api/bills/sent', { method: 'POST', body: { 房号, 月份 } });
+  if (r.错误) { 提示(r.错误); return; }
+  提示('已标记发送'); 渲染();
+};
 // ============ 备忘录（总览卡片，全局常驻不分月份） ============
 let 备忘缓存 = [];            // 本地缓存，勾选/切模式时直接重绘，不用每次都请求后端
 let 备忘删除模式 = false;      // 默认关闭：平时不显示删除图标，防手机误触
@@ -392,19 +420,54 @@ function 备忘录卡片(列表) {
   const 标题 = `<h2 style="margin:0">📝 备忘录</h2>
     <span class="备忘待办数" id="备忘待办数" style="${待办 ? '' : 'display:none'}">${待办} 条待办</span>`;
   const 内容 = `<div class="备忘输入行">
-      <textarea id="备忘输入" rows="2" placeholder="记点什么…（Ctrl+回车 或点 +添加）" onkeydown="if(event.key==='Enter'&&event.ctrlKey&&!event.isComposing)添加备忘()"></textarea>
+      <textarea id="备忘输入" rows="3" placeholder="记点什么…支持 Markdown（Ctrl+回车 或点 +添加）" onkeydown="if(event.key==='Enter'&&event.ctrlKey&&!event.isComposing)添加备忘()"></textarea>
       <button class="btn" onclick="添加备忘()">+ 添加</button>
     </div>
     <div id="备忘列表">${备忘录列表HTML(列表)}</div>`;
   return 折叠卡片('备忘录', 标题, 内容);
 }
+// Markdown 渲染：先转义 HTML 防 XSS，再把 MD 标记转成安全 HTML（标题/加粗/斜体/列表/代码/链接/删除线）
+function 内联MD(文本) {
+  let s = 文本;
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (全, 文, 址) => (/^https?:\/\//i.test(址) ? `<a href="${址}" target="_blank" rel="noopener">${文}</a>` : 文));
+  return s;
+}
+function 渲染MD(文本) {
+  let 列表 = null, 代码块 = false, html = '';
+  for (const 原始行 of String(文本 ?? '').split(/\r?\n/)) {
+    const 行 = 转义(原始行); // 先转义，内联MD 在其上再处理
+    if (/^```/.test(行)) { 代码块 = !代码块; continue; }
+    if (代码块) { html += `<pre><code>${行}</code></pre>`; continue; }
+    const 标题 = 行.match(/^(#{1,6})\s+(.*)$/);
+    if (标题) { const 级 = 标题[1].length; html += `<h${级}>${内联MD(标题[2])}</h${级}>`; continue; }
+    const 无序 = 行.match(/^\s*[-*+]\s+(.*)$/);
+    if (无序) { if (列表 !== 'ul') { if (列表) html += `</${列表}>`; 列表 = 'ul'; html += '<ul>'; } html += `<li>${内联MD(无序[1])}</li>`; continue; }
+    const 有序 = 行.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (有序) { if (列表 !== 'ol') { if (列表) html += `</${列表}>`; 列表 = 'ol'; html += '<ol>'; } html += `<li>${内联MD(有序[1])}</li>`; continue; }
+    if (列表) { html += `</${列表}>`; 列表 = null; }
+    html += 行 ? `<p>${内联MD(行)}</p>` : '';
+  }
+  if (列表) html += `</${列表}>`;
+  return html;
+}
+// 折叠预览：取第一行、剥掉常见 MD 标记，纯文本显示
+function 备忘预览(内容) {
+  const 首行 = String(内容 || '').split(/\r?\n/)[0].trim();
+  return 首行.replace(/^#{1,6}\s+/, '').replace(/^[-*+>]\s+/, '').replace(/[`*_~]/g, '').slice(0, 40);
+}
 function 备忘内容HTML(m) {
   const 内容 = m.内容 || '';
   const 需要折叠 = 内容.includes('\n') || 内容.length > 40; // 多行/长内容才折叠，短内容整条直接显示
-  if (!需要折叠) return `<span class="备忘内容">${转义(内容)}</span>`;
-  if (备忘展开.has(m.id)) return `<span class="备忘内容 备忘展开" onclick="切换备忘展开(${m.id})" title="点击收起">${转义(内容)}\n<span class="备忘折叠标">▴ 收起</span></span>`;
-  const 预览 = 内容.split('\n')[0].slice(0, 40) + '…';
-  return `<span class="备忘内容 备忘可折叠" onclick="切换备忘展开(${m.id})" title="点击展开全文">${转义(预览)} <span class="备忘折叠标">▾ 展开</span></span>`;
+  const 展开 = 备忘展开.has(m.id);
+  const 折叠钮 = 需要折叠 ? `<button class="备忘折叠钮" onclick="切换备忘展开(${m.id})">${展开 ? '▴ 收起' : '▾ 展开'}</button>` : '';
+  // 展开/收起只用独立按钮触发，内容区不绑点击 → 鼠标选中复制文字不会误触折叠
+  if (展开) return `<div class="备忘内容 备忘展开">${渲染MD(内容)}</div>${折叠钮}`;
+  if (需要折叠) return `<div class="备忘内容 备忘可折叠">${转义(备忘预览(内容))}</div>${折叠钮}`;
+  return `<div class="备忘内容">${渲染MD(内容)}</div>`;
 }
 window.切换备忘展开 = function(id) { 备忘展开.has(id) ? 备忘展开.delete(id) : 备忘展开.add(id); 重绘备忘列表(); };
 function 备忘录列表HTML(列表) {
@@ -484,6 +547,23 @@ window.清除已完成备忘 = async function() {
   const r = await api('/api/memos/done', { method: 'DELETE' });
   await 刷新备忘列表(); 提示(`已清除 ${r.删除数 || 0} 条`);
 };
+
+// 身份证校验：18 位 + 前 17 位数字 + 末位数字/X + 出生日期合法 + 末位校验码（GB 11643-1999）
+function 校验身份证(号) {
+  const s = String(号 || '').trim().toUpperCase();
+  if (!s) return { 有效: true }; // 空值不拦（可选字段）
+  if (!/^\d{17}[\dX]$/.test(s)) return { 有效: false, 原因: '应为 18 位，前 17 位数字、末位数字或 X' };
+  const 年 = Number(s.slice(6, 10)), 月 = Number(s.slice(10, 12)), 日 = Number(s.slice(12, 14));
+  if (年 < 1900 || 年 > 2100) return { 有效: false, 原因: '出生年份不合理' };
+  const 生日 = new Date(Date.UTC(年, 月 - 1, 日));
+  if (生日.getUTCFullYear() !== 年 || 生日.getUTCMonth() !== 月 - 1 || 生日.getUTCDate() !== 日) return { 有效: false, 原因: '出生日期不合法' };
+  const 权重 = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const 码表 = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
+  let 和 = 0;
+  for (let i = 0; i < 17; i++) 和 += Number(s[i]) * 权重[i];
+  if (码表[和 % 11] !== s[17]) return { 有效: false, 原因: '校验码不正确' };
+  return { 有效: true };
+}
 
 // ============ 房间档案 ============
 async function 渲染房间(容器) {
@@ -623,6 +703,8 @@ window.切房间模式 = function(模式) {
 window.保存房间 = async function() {
   const 数据 = { 房号: document.getElementById('f房号').value, ...收集房间数据() };
   if (!数据.房号) { 提示('请选择房号'); return; }
+  const 证 = 校验身份证(数据.身份证);
+  if (!证.有效) { 提示('身份证' + 证.原因); return; }
   if (!(await 询问确认('确认保存？', `${转义(数据.房号)}　出租信息`))) return;
   const r = await api('/api/rooms', { method: 'POST', body: 数据 });
   if (r.错误) { 提示(r.错误); return; }
@@ -653,6 +735,8 @@ window.保存编辑 = async function(房号) {
   const rooms = await api('/api/rooms');
   const r = rooms.find(x => x.房号 === 房号);
   if (!r) return;
+  const 证 = 校验身份证(document.getElementById('f身份证')?.value || '');
+  if (!证.有效) { 提示('身份证' + 证.原因); return; }
   if (!(await 询问确认('确认保存？', `${转义(房号)}　房间信息修改`))) return;
   await api(`/api/rooms/${r.id}`, { method: 'PUT', body: 收集房间数据() }); // 房号由 URL 定位，不可改
   提示('已保存'); 关闭模态(); 渲染();
@@ -972,6 +1056,8 @@ async function 渲染租客账单(容器) {
       ${b.转下月 ? `<div class="账单底度" style="color:var(--红)">本月已欠费滚存 ¥${数字(b.转下月)} 到下月</div>` : ''}
       ${b.状态==='欠款' ? `<div class="账单底度" style="color:var(--红)">欠 ¥${数字(b.欠款)}</div>` : ''}
       ${b.房间备注 ? `<div class="账单备注">📝 房间备注：${转义(b.房间备注)}</div>` : ''}
+      ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<div style="margin-top:12px"><button class="btn 成功" onclick="标记已发送('${转义(b.房号)}','${b.月份}')">📤 发送账单（截图发给租客后点这里）</button></div>` : ''}
+      ${b.可计算 && b.已发送 ? `<div class="账单底度" style="color:var(--绿)">✅ 已发送给租客</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1480,6 +1566,10 @@ window.办入住 = async function(房号) {
   const 金额 = Number(金额值);
   if (!(金额 >= 0)) { 提示('金额不对'); return; }
   const 客人们 = 收集客人们();
+  for (const 客 of 客人们) {
+    const 证 = 校验身份证(客.身份证);
+    if (!证.有效) { 提示(`${客.姓名 || '客人'} 的身份证${证.原因}`); return; }
+  }
   const 名字 = 客人们.map(x => x.姓名).filter(Boolean).join('、');
   const 时长文 = 钟点 ? `钟点房 ${时长小时} 小时` : `${天数} 天`;
   if (!await 询问确认('确认办理入住？',
@@ -2139,7 +2229,16 @@ window.保存设置 = async function() {
 // 一键切到下月（当前月份 +1）
 window.切下月 = async function() {
   const 当前月 = 全局.settings.当前月份;
-  await api('/api/settle', { method: 'POST', body: { 月份: 当前月 } }); // 固化本月到历史总账单 + 账单明细快照
+  const r = await api('/api/settle', { method: 'POST', body: { 月份: 当前月 } }); // 固化本月到历史总账单 + 账单明细快照
+  if (r.错误) {
+    // 有欠款未滚存：列出欠款房，阻止切月
+    const 清单 = (r.欠款房 || []).map(x => `${x.房号}：欠 ¥${数字(x.欠)}`).join('<br>');
+    打开模态(`<h2>⚠️ 还有欠款未滚存，不能切月</h2>
+      <p style="color:var(--次文字);font-size:15px;margin:10px 0">下面这些房间本月还有欠款没处理，请先到总览状态页「欠费滚存」或收清，再切月：</p>
+      <div style="background:var(--灰);padding:12px 16px;border-radius:10px;font-size:15px;line-height:1.9">${清单 || '（无明细）'}</div>
+      <div style="margin-top:14px;display:flex;gap:8px"><button class="btn 次" onclick="关闭模态()">知道了</button></div>`);
+    return;
+  }
   const 下月 = 加月(当前月, 1);
   await api('/api/settings', { method: 'POST', body: { 当前月份: 下月 } });
   全局 = await api('/api/all'); 提示('已切到 ' + 下月 + '，上月已锁定'); 渲染();
