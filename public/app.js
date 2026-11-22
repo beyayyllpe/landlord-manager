@@ -1513,38 +1513,77 @@ function 收集客人们() {
   }).filter(x => x.姓名 || x.电话 || x.身份证);
 }
 function 打开在住详情(r) {
+  在住编辑中 = false;
   const 行 = (标, 值) => `<div class="详情项"><span>${标}</span><b>${转义(值 == null || 值 === '' ? '—' : String(值))}</b></div>`;
   const 钟点 = r.房型 === '钟点';
   const 客人们 = (r.客人们 && r.客人们.length) ? r.客人们 : [{ 姓名: r.客人, 电话: r.电话, 身份证: r.身份证 }];
+  const 单价 = 钟点 ? 0 : Math.round((Number(r.金额) || 0) / Math.max(1, Number(r.天数) || 1));
+  const 客人行们 = 客人们.map(g => `<div class="客人行">
+      <div class="字段"><label>姓名</label><input class="客名" value="${转义(g.姓名 || '')}" disabled></div>
+      <div class="字段"><label>电话</label><input class="客话" value="${转义(g.电话 || '')}" disabled></div>
+      <div class="字段"><label>身份证</label><input class="客证" value="${转义(g.身份证 || '')}" disabled></div>
+    </div>`).join('');
   打开模态(`<h2>${转义(r.房号)} —— 在住中${钟点 ? '（钟点房）' : ''}</h2>
-    <div class="表格容器"><table>
-      <tr><th>客人</th><th>电话</th><th>身份证</th></tr>
-      ${客人们.map(g => `<tr><td>${转义(g.姓名 || '—')}</td><td>${转义(g.电话 || '—')}</td><td>${转义(g.身份证 || '—')}</td></tr>`).join('')}
-    </table></div>
-    <div class="详情格" style="margin-top:12px">
-      ${行('入住日', r.入住日)}
-      ${钟点 ? 行('时长', r.时长小时 + ' 小时') : 行('入住天数', r.天数 + ' 天')}
-      ${钟点 ? 行('到点时刻', 时刻(r.预计退房)) : 行('到期日', r.到期日)}
-      ${行('金额', '¥' + 数字(r.金额) + (r.日租id == null ? '（0 元未入账）' : ''))}
-      ${行('办理时间', 时刻(r.入住时间))}${行('备注', r.备注)}
+    <div id="编辑区">
+      ${客人行们}
+      <div class="详情格" style="margin-top:12px">
+        ${行('入住日', r.入住日)}
+        ${钟点 ? 行('到点时刻', 时刻(r.预计退房)) : 行('到期日', r.到期日)}
+        ${行('办理时间', 时刻(r.入住时间))}
+      </div>
+      <div class="表单 两列" style="margin-top:12px">
+        ${钟点
+          ? `<div class="字段"><label>时长（小时）</label><input id="续时长" type="number" min="0.5" step="0.5" value="${r.时长小时 || 3}" disabled></div>`
+          : `<div class="字段"><label>入住天数</label><input id="续天数" type="number" min="1" value="${r.天数 || 1}" disabled></div>`}
+        <div class="字段"><label>金额（累计）</label><input id="续金额" type="number" min="0" value="${r.金额}" disabled></div>
+        <div class="字段"><label>备注</label><input id="续备注" value="${转义(r.备注 || '')}" disabled></div>
+      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-top:8px">默认只读，点「修改」解锁后可改客人、备注、${钟点 ? '时长' : '入住天数'}和金额，改完点「保存」生效；改成 <b>0 元会撤掉账单</b>，从 0 改成正数会补记一条。${r.日租id == null ? '（当前 0 元未入账）' : ''}</p>
     </div>
-    ${r.已超期 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⚠ 已超过到期日，续住请在下面加天数。</p>' : ''}
-    ${钟点 && r.剩余分钟 != null && r.剩余分钟 <= 0 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⏰ 已到点，刷新后会自动转成脏房；要延时就在下面加小时数。</p>' : ''}
-    <h3 style="margin-top:16px">${钟点 ? '延时 / 改价' : '续住 / 改价'}</h3>
-    <div class="表单 两列">
-      ${钟点
-        ? `<div class="字段"><label>时长（小时）</label><input id="续时长" type="number" min="0.5" step="0.5" value="${r.时长小时 || 3}"></div>`
-        : `<div class="字段"><label>入住天数</label><input id="续天数" type="number" min="1" value="${r.天数 || 1}"></div>`}
-      <div class="字段"><label>金额</label><input id="续金额" type="number" min="0" value="${r.金额}"></div>
+    ${r.已超期 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⚠ 已超过到期日，点「续住」加天数。</p>' : ''}
+    ${钟点 && r.剩余分钟 != null && r.剩余分钟 <= 0 ? '<p style="color:var(--红);font-size:13px;margin-top:10px">⏰ 已到点，刷新后会自动转成脏房；要延时请点「续住」。</p>' : ''}
+    <div id="续住区" style="display:none;margin-top:16px;padding:12px;border:1px solid var(--主色);border-radius:8px;background:var(--灰)">
+      <div style="font-weight:600;margin-bottom:8px">续住${钟点 ? '（延时）' : ''}</div>
+      <div class="表单 两列">
+        ${钟点
+          ? `<div class="字段"><label>延时后总时长（小时）</label><input id="续住时长" type="number" min="0.5" step="0.5" value="${r.时长小时 || 3}"></div>`
+          : `<div class="字段"><label>续住天数</label><input id="续住天数" type="number" min="1" value="1"></div>`}
+        <div class="字段"><label>${钟点 ? '金额' : '本次缴纳金额'}</label><input id="续住金额" type="number" min="0" value="${钟点 ? (Number(r.金额) || 0) : 单价}"></div>
+      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-top:8px">${钟点 ? '改成延时后的总时长和金额，确认后按新时长重算到点时间。' : '只填<b>本次</b>续住的天数和钱，确认后自动累加到上面的累计值。'}</p>
+      <div style="margin-top:10px"><button class="btn 成功" onclick="提交续住('${转义(r.房号)}')">确认续住</button></div>
     </div>
-    <p style="color:var(--次文字);font-size:13px;margin-top:8px">改完会同步更新这间房对应的那条日租账单。改成 <b>0 元会撤掉账单</b>，从 0 改成正数会补记一条。</p>
     <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="保存续住('${转义(r.房号)}')">保存续住 / 改价</button>
+      <button class="btn 成功" onclick="切换续住区()">续住</button>
+      <button class="btn" id="修改钮" onclick="切换编辑()">✏️ 修改</button>
       <button class="btn 黄" onclick="房间退房('${转义(r.房号)}')">退房（转脏房）</button>
       <button class="btn 危险" onclick="撤销入住('${转义(r.房号)}')">撤销入住</button>
+      <button class="btn" id="保存钮" onclick="保存在住('${转义(r.房号)}')" disabled>保存</button>
       <button class="btn 次" onclick="请求关闭模态()">关闭</button>
     </div>`);
 }
+// 点「修改」：解锁/锁定可编辑字段（默认只读锁定，改完点「保存」才生效）
+let 在住编辑中 = false;
+window.切换编辑 = function() {
+  在住编辑中 = !在住编辑中;
+  const 区 = document.getElementById('编辑区');
+  if (区) 区.querySelectorAll('input').forEach(el => { el.disabled = !在住编辑中; });
+  const 修改钮 = document.getElementById('修改钮');
+  if (修改钮) 修改钮.textContent = 在住编辑中 ? '🔒 锁定' : '✏️ 修改';
+  const 保存钮 = document.getElementById('保存钮');
+  if (保存钮) 保存钮.disabled = !在住编辑中;
+};
+// 点「续住」：展开/收起续住区（不点不显示）。展开后聚焦续住天数/时长框
+window.切换续住区 = function() {
+  const 区 = document.getElementById('续住区');
+  if (!区) return;
+  const 显示 = 区.style.display === 'none';
+  区.style.display = 显示 ? '' : 'none';
+  if (显示) {
+    const 框 = document.getElementById('续住天数') || document.getElementById('续住时长');
+    框 && 框.focus();
+  }
+};
 function 打开脏房详情(r) {
   打开模态(`<h2>${转义(r.房号)} —— 脏房待清洁</h2>
     <p style="color:var(--次文字);font-size:14px">${r.客人 ? '上一位客人：<b style="color:var(--文字)">' + 转义(r.客人) + '</b>　' : ''}退房时间：<b style="color:var(--文字)">${转义(时刻(r.退房时间) || '—')}</b></p>
@@ -1582,20 +1621,64 @@ window.办入住 = async function(房号) {
   if (r.错误) { 提示(r.错误); return; }
   提示(`${房号} 已入住`); 关闭模态(); 渲染();
 };
-window.保存续住 = async function(房号) {
+// 保存：把「修改」解锁后改的客人/备注/入住天数/金额（钟点房是时长/金额）存进去，等于原来的改价
+window.保存在住 = async function(房号) {
   const 时长框 = document.getElementById('续时长');
   const 钟点 = !!时长框;
   const 时长小时 = 钟点 ? Number(时长框.value) || 0 : 0;
   const 天数 = 钟点 ? 1 : (Number(document.getElementById('续天数').value) || 0);
-  const 金额 = Number(document.getElementById('续金额').value);
+  const 金额值 = document.getElementById('续金额').value;
   if (钟点 && 时长小时 < 0.5) { 提示('钟点时长至少 0.5 小时'); return; }
   if (!钟点 && 天数 < 1) { 提示('入住天数要填 1 以上'); return; }
+  if (金额值 === '') { 提示('请填金额'); return; }
+  const 金额 = Number(金额值);
   if (!(金额 >= 0)) { 提示('金额不对'); return; }
-  if (!await 询问确认('确认修改？',
-    `${转义(房号)}　改为 ${钟点 ? 时长小时 + ' 小时（从入住时刻起算）' : 天数 + ' 天'}　¥${数字(金额)}<br>对应的日租账单会一起改。`)) return;
-  const r = await api('/api/roomstatus/extend', { method: 'POST', body: { 房号, 天数, 金额, 时长小时 } });
+  // 收集客人（姓名/电话/身份证），去掉整行全空的
+  const 客人们 = [...document.querySelectorAll('#编辑区 .客人行')].map(行 => ({
+    姓名: 行.querySelector('.客名').value.trim(),
+    电话: 行.querySelector('.客话').value.trim(),
+    身份证: 行.querySelector('.客证').value.trim()
+  })).filter(x => x.姓名 || x.电话 || x.身份证);
+  for (const 客 of 客人们) {
+    const 证 = 校验身份证(客.身份证);
+    if (!证.有效) { 提示(`${客.姓名 || '客人'} 的身份证${证.原因}`); return; }
+  }
+  const 备注 = document.getElementById('续备注').value.trim();
+  const 名字 = 客人们.map(x => x.姓名).filter(Boolean).join('、');
+  if (!await 询问确认('确认保存？',
+    `${转义(房号)}　${转义(名字 || '未留姓名')}　改为 ${钟点 ? 时长小时 + ' 小时（从入住时刻起算）' : 天数 + ' 天'}　¥${数字(金额)}<br>对应的日租账单会一起改。`)) return;
+  const r = await api('/api/roomstatus/extend', { method: 'POST', body: { 房号, 天数, 金额, 时长小时, 客人们, 备注 } });
   if (r.错误) { 提示(r.错误); return; }
-  提示(r.提示 || '已更新'); 关闭模态(); 渲染();
+  提示(r.提示 || '已保存'); 关闭模态(); 渲染();
+};
+// 续住：全天房只填本次增量（天数+金额）自动累加；钟点房填延时后的总时长+金额
+window.提交续住 = async function(房号) {
+  const r = 找房态(房号);
+  if (!r) { 提示('房间信息已过期，正在刷新'); 渲染(); return; }
+  const 钟点 = r.房型 === '钟点';
+  const 金额值 = document.getElementById('续住金额').value;
+  if (金额值 === '') { 提示('请填金额'); return; }
+  const 金额 = Number(金额值);
+  if (!(金额 >= 0)) { 提示('金额不对'); return; }
+  if (钟点) {
+    const 时长小时 = Number(document.getElementById('续住时长').value) || 0;
+    if (时长小时 < 0.5) { 提示('延时时长至少 0.5 小时'); return; }
+    if (!await 询问确认('确认延时？', `${转义(房号)}　延时后 ${时长小时} 小时　¥${数字(金额)}<br>对应的日租账单会一起改。`)) return;
+    const res = await api('/api/roomstatus/extend', { method: 'POST', body: { 房号, 天数: 1, 金额, 时长小时 } });
+    if (res.错误) { 提示(res.错误); return; }
+    提示(res.提示 || '已延时'); 关闭模态(); 渲染();
+    return;
+  }
+  const 续住天数 = Number(document.getElementById('续住天数').value) || 0;
+  if (续住天数 < 1) { 提示('续住天数要填 1 以上'); return; }
+  const 续住金额 = 金额;
+  const 天数 = (Number(r.天数) || 0) + 续住天数;
+  const 总金额 = (Number(r.金额) || 0) + 续住金额;
+  if (!await 询问确认('确认续住？',
+    `${转义(房号)}　续住 ${续住天数} 天，本次 ¥${数字(续住金额)}<br>累计后：${天数} 天　共 ¥${数字(总金额)}`)) return;
+  const res = await api('/api/roomstatus/extend', { method: 'POST', body: { 房号, 天数, 金额: 总金额 } });
+  if (res.错误) { 提示(res.错误); return; }
+  提示(res.提示 || '续住成功'); 关闭模态(); 渲染();
 };
 window.房间退房 = async function(房号) {
   if (!await 询问确认('确认退房？', `${转义(房号)} 转为「脏房」等待清洁。<br>房费已在入住时记账，退房不影响账单。`)) return;

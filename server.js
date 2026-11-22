@@ -1233,11 +1233,18 @@ app.post('/api/roomstatus/extend', (req, res) => {
     态.时长小时 = Math.max(0.5, Number(req.body.时长小时) || 3);
     态.预计退房 = 算预计退房(态.入住时间, 态.时长小时);
   }
-  if (req.body.客人 != null) 态.客人 = String(req.body.客人).trim();
-  if (req.body.电话 != null) 态.电话 = String(req.body.电话).trim();
-  if (req.body.身份证 != null) 态.身份证 = String(req.body.身份证).trim();
+  // 客人：支持多位（客人们数组，办入住同款）；没传数组就退回老的单字段写法
+  const 客人们 = 读客人们(req.body);
+  if (客人们.length) {
+    const 主客 = 客人们[0];
+    态.客人 = 客人们.map(x => x.姓名).filter(Boolean).join('、');
+    态.客人们 = 客人们.map(({ 姓名, 电话, 身份证 }) => ({ 姓名, 电话, 身份证 }));   // 档案id 不落进房态
+    态.电话 = 主客.电话; 态.身份证 = 主客.身份证;
+  }
   if (req.body.备注 != null) 态.备注 = String(req.body.备注).trim();
-  记客人(态.客人, 态.身份证, 态.电话, 态.备注);
+  // 每位都回写客人档案；备注是整单一个字段，记给第一位客人
+  (客人们.length ? 客人们 : [{ 姓名: 态.客人, 电话: 态.电话, 身份证: 态.身份证 }])
+    .forEach((g, i) => 记客人(g.姓名, g.身份证, g.电话, i === 0 ? 态.备注 : '', g.档案id));
   // 账单跟着金额走：改成 0 就把账单撤掉，从 0 改成正数就补记一条，否则原地改
   let 账单 = 态.日租id != null ? data.daily.find(d => d.id === 态.日租id) : null;
   let 提示 = '';
