@@ -165,6 +165,16 @@ function 校验凭据(用户名, 密码) {
   return 定长相等(String(用户名), 凭据.用户名) && 定长相等(算哈希(密码, 凭据.盐), 凭据.哈希);
 }
 const basicAuth = require('express-basic-auth');
+// CSRF 防线：浏览器发起的跨站写请求（POST/PUT/PATCH/DELETE）直接 403。
+// Sec-Fetch-Site 是浏览器带的请求来源标记：same-origin=同源、none=非浏览器/直接导航，其余（cross-site/same-site）都拦。
+// 没带这个头（旧浏览器、curl、脚本、本地工具）不拦、放开——只挡浏览器跨站，不挡正常调用。
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    const 来源 = req.headers['sec-fetch-site'];
+    if (来源 && 来源 !== 'same-origin' && 来源 !== 'none') return res.status(403).json({ 错误: '跨站请求被拒绝' });
+  }
+  next();
+});
 app.use(basicAuth({ authorizer: 校验凭据, challenge: true }));
 // -----------密码---------
 
@@ -1848,16 +1858,15 @@ let 重试次数 = 0;
   if (e.code === 'EADDRINUSE' && 重试次数 < 6) {
     重试次数 += 1;
     console.log(`端口 ${端口} 暂时被占用，500ms 后重试（${重试次数}/6）`);
-    setTimeout(() => 服务.listen(端口, '0.0.0.0'), 500);
+    setTimeout(() => 服务.listen(端口, '127.0.0.1'), 500);
   } else {
     console.error('启动失败：' + e.message);
     process.exit(1);
   }
 });
-服务.listen(端口, '0.0.0.0', () => {
-  console.log('租房管家已启动：');
+服务.listen(端口, '127.0.0.1', () => {
+  console.log('租房管家已启动（绑定 127.0.0.1，经 nginx 反代对外）：');
   console.log(`  本机访问：http://localhost:${端口}`);
-  console.log(`  手机访问：http://<本机IP>:${端口}`);
   console.log('数据文件：' + 数据文件);
   console.log('按 Ctrl+C 停止');
 });
