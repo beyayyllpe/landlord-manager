@@ -1801,7 +1801,8 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 }
 .全景房格:hover { transform: translateY(-1px); border-color: var(--ink); }
 .全景房格.联动高亮 { border-color: var(--ink) !important; box-shadow: 0 0 0 1.5px var(--ink); transform: translateY(-1px); }
-.全景房格.淡化 { opacity: .26; }
+.全景房格.淡化 { opacity: .12; filter: grayscale(75%); }
+.全景房格.淡化:hover { opacity: .45; filter: none; }
 .全景房格.已核收 { background: var(--ok-bg); border-color: transparent; color: var(--ok-text); }
 .全景房格.空置净 { background: var(--bg-vacant); border-color: transparent; color: var(--text-vacant); }
 .全景房格.自住 { background: var(--bg-vacant); border-color: transparent; color: var(--text-vacant); }
