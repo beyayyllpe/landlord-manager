@@ -164,7 +164,66 @@ function 校验凭据(用户名, 密码) {
   const 凭据 = 读凭据();
   return 定长相等(String(用户名), 凭据.用户名) && 定长相等(算哈希(密码, 凭据.盐), 凭据.哈希);
 }
-const basicAuth = require('express-basic-auth');
+
+// ============ 会话鉴权（HttpOnly 签名 Cookie，替代原生 Basic Auth 弹窗） ============
+const 会话Cookie名 = 'th_session';
+const 会话有效期秒 = 7 * 24 * 3600; // 7 天
+
+// 密钥由当前凭据派生：服务重启不掉登录，但一旦修改密码，所有旧会话立即作废
+function 会话密钥(凭据) {
+  return crypto.createHmac('sha256', 'tianhui-session-v1').update(`${凭据.盐}:${凭据.哈希}`).digest();
+}
+function 签发会话Token(凭据) {
+  const 载荷 = Buffer.from(JSON.stringify({ u: 凭据.用户名, exp: Date.now() + 会话有效期秒 * 1000 })).toString('base64url');
+  const 签名 = crypto.createHmac('sha256', 会话密钥(凭据)).update(载荷).digest('hex');
+  return `${载荷}.${签名}`;
+}
+function 校验会话Token(token) {
+  if (!token || typeof token !== 'string') return null;
+  const 点 = token.indexOf('.');
+  if (点 <= 0) return null;
+  const 载荷 = token.slice(0, 点);
+  const 签名 = token.slice(点 + 1);
+  const 凭据 = 读凭据();
+  const 期望 = crypto.createHmac('sha256', 会话密钥(凭据)).update(载荷).digest('hex');
+  if (!定长相等(签名, 期望)) return null;
+  try {
+    const 数据 = JSON.parse(Buffer.from(载荷, 'base64url').toString('utf8'));
+    if (!数据 || 数据.u !== 凭据.用户名 || Number(数据.exp) <= Date.now()) return null;
+    return 数据;
+  } catch (e) { return null; }
+}
+function 解析Cookie(req, 名) {
+  const raw = req.headers.cookie || '';
+  for (const 段 of raw.split(';')) {
+    const i = 段.indexOf('=');
+    if (i <= 0) continue;
+    if (段.slice(0, i).trim() === 名) return decodeURIComponent(段.slice(i + 1).trim());
+  }
+  return '';
+}
+function 是HTTPS请求(req) {
+  return Boolean(req.secure || String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https');
+}
+function 写登录Cookie(res, req, token) {
+  const 属性 = [`${会话Cookie名}=${encodeURIComponent(token)}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${会话有效期秒}`];
+  if (是HTTPS请求(req)) 属性.push('Secure');
+  res.setHeader('Set-Cookie', 属性.join('; '));
+}
+function 清登录Cookie(res, req) {
+  const 属性 = [`${会话Cookie名}=`, 'HttpOnly', 'Path=/', 'SameSite=Lax', 'Max-Age=0'];
+  if (是HTTPS请求(req)) 属性.push('Secure');
+  res.setHeader('Set-Cookie', 属性.join('; '));
+}
+
+// 基础安全响应头
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // CSRF 防线：浏览器发起的跨站写请求（POST/PUT/PATCH/DELETE）直接 403。
 // Sec-Fetch-Site 是浏览器带的请求来源标记：same-origin=同源、none=非浏览器/直接导航，其余（cross-site/same-site）都拦。
 // 没带这个头（旧浏览器、curl、脚本、本地工具）不拦、放开——只挡浏览器跨站，不挡正常调用。
@@ -175,10 +234,127 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(basicAuth({ authorizer: 校验凭据, challenge: true }));
-// -----------密码---------
 
 app.use(express.json({ limit: '20mb' })); // 备份/导入时完整备份可能超 100kb 默认限制，放大到 20mb
+
+// 独立登录页（无需登录即可访问；已登录则直接回首页）
+app.get('/login', (req, res) => {
+  if (校验会话Token(解析Cookie(req, 会话Cookie名))) return res.redirect('/');
+  try {
+    const html = fs.readFileSync(path.join(__dirname, 'public', 'login.html'), 'utf8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(html.replaceAll('__版本__', 读版本().提交 || String(Date.now())));
+  } catch (e) {
+    res.status(500).send('登录页加载失败：' + e.message);
+  }
+});
+
+// 登录接口：温和延迟 + 并发节流防爆破（兼容反向代理 127.0.0.1 链路，永不误锁正常用户）
+let 登录校验并发 = 0;
+app.post('/api/login', async (req, res) => {
+  if (登录校验并发 >= 2) return res.status(429).json({ 错误: '登录请求过于频繁，请稍后再试' });
+  登录校验并发++;
+  try {
+    const { 用户名, 密码 } = req.body || {};
+    const 凭据 = 读凭据();
+    if (校验凭据(String(用户名 || '').trim(), String(密码 || ''))) {
+      写登录Cookie(res, req, 签发会话Token(凭据));
+      return res.json({ ok: true, 用户名: 凭据.用户名 });
+    }
+    await new Promise(r => setTimeout(r, 2000));
+    return res.status(401).json({ 错误: '用户名或密码错误' });
+  } finally {
+    登录校验并发--;
+  }
+});
+
+// 退出登录
+app.post('/api/logout', (req, res) => {
+  清登录Cookie(res, req);
+  res.json({ ok: true });
+});
+
+// ============ 自定义登录页背景（图片 / GIF / 短视频，公开只读，上传/删除需登录） ============
+const 登录背景目录 = path.join(数据目录, 'login-bg');
+const 允许背景类型 = {
+  'image/jpeg': { ext: '.jpg', kind: 'image' },
+  'image/png': { ext: '.png', kind: 'image' },
+  'image/webp': { ext: '.webp', kind: 'image' },
+  'image/gif': { ext: '.gif', kind: 'image' },
+  'video/mp4': { ext: '.mp4', kind: 'video' },
+  'video/webm': { ext: '.webm', kind: 'video' },
+};
+function 查当前背景() {
+  try {
+    if (!fs.existsSync(登录背景目录)) return null;
+    for (const [mime, info] of Object.entries(允许背景类型)) {
+      const p = path.join(登录背景目录, 'bg' + info.ext);
+      if (fs.existsSync(p)) return { path: p, mime, kind: info.kind, ext: info.ext };
+    }
+  } catch (e) {}
+  return null;
+}
+function 校验文件魔数(buf, mime) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return false;
+  if (mime === 'image/jpeg') return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+  if (mime === 'image/png') return buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+  if (mime === 'image/gif') return buf.subarray(0, 4).toString('ascii') === 'GIF8';
+  if (mime === 'image/webp') return buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP';
+  if (mime === 'video/mp4') return buf.subarray(4, 8).toString('ascii') === 'ftyp';
+  if (mime === 'video/webm') return buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3;
+  return false;
+}
+app.get('/api/login-bg/meta', (req, res) => {
+  const bg = 查当前背景();
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  if (!bg) return res.json({ hasBg: false });
+  res.json({ hasBg: true, kind: bg.kind, mime: bg.mime });
+});
+app.get('/api/login-bg', (req, res) => {
+  const bg = 查当前背景();
+  if (!bg) return res.status(404).end();
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.type(bg.mime);
+  res.sendFile(bg.path);
+});
+
+// 全局鉴权拦截：除上述登录/登出/登录背景只读路由外，所有页面与 /api/* 必须先登录
+app.use((req, res, next) => {
+  if (校验会话Token(解析Cookie(req, 会话Cookie名))) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ 错误: '未登录或登录已过期' });
+  return res.redirect('/login');
+});
+
+// 上传/删除自定义登录背景（仅已登录用户可用，限 20MB 且校验真实文件头）
+app.post('/api/login-bg', express.raw({ type: ['image/*', 'video/*'], limit: '20mb' }), (req, res) => {
+  const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const info = 允许背景类型[mime];
+  if (!info) return res.status(400).json({ 错误: '仅支持 JPG、PNG、WebP、GIF 图片或 MP4、WebM 短视频' });
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ 错误: '文件为空' });
+  if (!校验文件魔数(req.body, mime)) return res.status(400).json({ 错误: '文件内容与格式不匹配，上传被拒绝' });
+  fs.mkdirSync(登录背景目录, { recursive: true });
+  for (const x of Object.values(允许背景类型)) {
+    const old = path.join(登录背景目录, 'bg' + x.ext);
+    if (fs.existsSync(old)) fs.unlinkSync(old);
+  }
+  const target = path.join(登录背景目录, 'bg' + info.ext);
+  const tmp = target + '.tmp';
+  fs.writeFileSync(tmp, req.body);
+  fs.renameSync(tmp, target);
+  res.json({ ok: true, kind: info.kind, mime });
+});
+app.delete('/api/login-bg', (req, res) => {
+  try {
+    if (fs.existsSync(登录背景目录)) {
+      for (const x of Object.values(允许背景类型)) {
+        const old = path.join(登录背景目录, 'bg' + x.ext);
+        if (fs.existsSync(old)) fs.unlinkSync(old);
+      }
+    }
+  } catch (e) {}
+  res.json({ ok: true });
+});
+// -----------密码---------
 
 // 首页动态注入版本号：把 index.html 里的 __版本__ 占位符替换成当前 commit 短哈希
 // 必须放在 express.static 之前，才能拦下 GET / 这个精确路径（已知坑 12 的永久解决方案）
@@ -605,6 +781,7 @@ app.post('/api/password', (req, res) => {
   // 前端已比对过两次输入，这里再兜一次，防止绕过页面直接调接口打错密码把自己锁在外面
   if (确认密码 != null && String(确认密码) !== 密码) return res.status(400).json({ 错误: '两次输入的新密码不一致' });
   写凭据(造凭据(用户名, 密码));
+  清登录Cookie(res, req);
   res.json({ ok: true, 用户名 });
 });
 

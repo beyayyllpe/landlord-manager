@@ -7,27 +7,62 @@
   <link rel="stylesheet" href="style.css?v=__版本__">
 </head>
 <body>
-  <header class="顶栏">
-    <div class="顶栏左">
-      <span class="logo">🏠</span>
-      <h1>租房管家</h1>
-      <span class="月份显示" id="月份显示"></span>
-    </div>
-    <nav class="导航" id="导航">
-      <button data-page="总览" class="激活">总览</button>
-      <button data-page="房间">房间档案</button>
-      <button data-page="抄表">水电抄表</button>
-      <button data-page="账单">租客账单</button>
-      <button data-page="月租">月租</button>
-      <button data-page="日租">日租</button>
-      <button data-page="退房">退房</button>
-      <button data-page="收支">支出</button>
-      <button data-page="月度账单">账单</button>
-      <button data-page="设置">设置</button>
-    </nav>
-  </header>
+  <div class="应用壳">
+    <div class="侧边遮罩" id="侧边遮罩"></div>
 
-  <main id="内容"></main>
+    <aside class="侧边栏" id="侧边栏">
+      <div class="侧边品牌">
+        <span class="logo">🏠</span>
+        <div class="品牌字">
+          <h1>租房管家</h1>
+          <span>房源 · 账单 · 房态</span>
+        </div>
+        <button type="button" class="抽屉关" id="抽屉关" aria-label="关闭菜单">✕</button>
+      </div>
+
+      <nav class="导航" id="导航">
+        <button data-page="总览" class="激活"><span class="菜单图标">📊</span><span class="菜单字">总览</span></button>
+        <button data-page="房间"><span class="菜单图标">🚪</span><span class="菜单字">房间档案</span></button>
+        <button data-page="抄表"><span class="菜单图标">💧</span><span class="菜单字">水电抄表</span></button>
+        <button data-page="账单"><span class="菜单图标">🧾</span><span class="菜单字">租客账单</span></button>
+        <button data-page="月租"><span class="菜单图标">📅</span><span class="菜单字">月租</span></button>
+        <button data-page="日租"><span class="菜单图标">🛏️</span><span class="菜单字">日租</span></button>
+        <button data-page="退房"><span class="菜单图标">🧳</span><span class="菜单字">退房</span></button>
+        <button data-page="收支"><span class="菜单图标">💸</span><span class="菜单字">支出</span></button>
+        <button data-page="月度账单"><span class="菜单图标">📈</span><span class="菜单字">账单</span></button>
+        <div class="导航组" id="设置菜单组">
+          <button type="button" class="组头" id="设置折叠钮">
+            <span class="菜单图标">⚙️</span><span class="菜单字">设置</span><span class="折叠箭">▸</span>
+          </button>
+          <div class="子导航" id="设置子导航">
+            <button data-page="设置" data-setting="主题"><span class="菜单图标">🎨</span><span class="菜单字">主题模式</span></button>
+            <button data-page="设置" data-setting="安全"><span class="菜单图标">🔒</span><span class="菜单字">安全设置</span></button>
+            <button data-page="设置" data-setting="导出"><span class="菜单图标">📦</span><span class="菜单字">导出</span></button>
+            <button data-page="设置" data-setting="参数"><span class="菜单图标">🛠️</span><span class="菜单字">参数</span></button>
+            <button data-page="设置" data-setting="关于"><span class="菜单图标">ℹ️</span><span class="菜单字">关于</span></button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="侧边底栏">
+        <button type="button" class="退出钮" id="退出登录"><span>🚪</span><span>退出登录</span></button>
+      </div>
+    </aside>
+
+    <div class="主体区">
+      <header class="顶栏">
+        <div class="顶栏左">
+          <button type="button" class="菜单开关" id="菜单开关" aria-label="打开菜单">☰</button>
+          <span class="当前页标题" id="当前页标题">总览</span>
+        </div>
+        <div class="顶栏右">
+          <span class="月份显示" id="月份显示"></span>
+        </div>
+      </header>
+
+      <main id="内容"></main>
+    </div>
+  </div>
 
   <div class="提示" id="提示"></div>
 

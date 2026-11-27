@@ -1,192 +1,611 @@
-/* 租房管家 —— 样式（响应式，移动优先）。明亮主题参考 Emby Light 风格 */
+/* 租房管家 —— 全站统一设计系统（米纸暖灰底 + 5 种克制语义色，兼容浅/深双主题） */
 :root {
-  --主色: #00a4dc;      /* Emby 强调青蓝 */
-  --主色深: #0088b8;
-  --绿: #52b54b;
-  --红: #e53935;
-  --灰: #f2f0f6;        /* 次级面板，偏紫灰 */
-  --边框: #e4e1ea;
-  --文字: #1c1a22;
-  --次文字: #6f6a7a;
-  --卡片: #ffffff;
+  /* 底层色（所有页面共用） */
+  --bg: #F5F4F0;
+  --surface: #FFFFFF;
+  --surface-muted: #F0EEE9;
+  --surface-subtle: #ECEAE4;
+  --border: #E6E3DC;
+  --ink: #1F2329;
+  --ink-2: #6B7280;
+  --ink-3: #8A877F;
+
+  /* 5 种语义色：红 / 琥珀 / 蓝 / 紫(仅日租) / 绿 */
+  --danger-bg: #FAECE8;
+  --danger-text: #A93F2B;
+  --danger-border: #EBCBC3;
+  --warn-bg: #F6EEDB;
+  --warn-text: #8A6516;
+  --info-bg: #EAF0F8;
+  --info-text: #3A6AA3;
+  --daily-bg: #EDEAF5;
+  --daily-occupied-bg: #DDD6F0;
+  --daily-text: #5B4E8C;
+  --daily-occupied-text: #4A3D7A;
+  --ok-bg: #E9F3EC;
+  --ok-text: #35724D;
+
+  /* 兼容旧变量映射 */
+  --主色: var(--ink);
+  --主色深: #373C44;
+  --主色浅: var(--surface-subtle);
+  --绿: var(--ok-text);
+  --红: var(--danger-text);
+  --背景: var(--bg);
+  --灰: var(--surface-muted);
+  --边框: var(--border);
+  --文字: var(--ink);
+  --次文字: var(--ink-3);
+  --卡片: var(--surface);
+  --侧边背景: var(--surface);
+  --阴影: 0 1px 3px rgba(31, 35, 41, 0.04);
+  --阴影浮: 0 10px 25px -5px rgba(31, 35, 41, 0.08);
+
+  /* 工作台兼容变量 */
+  --bg-page: var(--bg);
+  --bg-card: var(--surface);
+  --border-card: var(--border);
+  --text-main: var(--ink);
+  --text-sub: var(--ink-3);
+  --bg-vacant: var(--surface-subtle);
+  --text-vacant: #A8A59D;
+  --bg-arrears: var(--danger-bg);
+  --text-arrears: var(--danger-text);
+  --border-unpaid: var(--danger-border);
+  --bg-dirty: var(--warn-bg);
+  --text-dirty: var(--warn-text);
+  --bg-unmetered: var(--info-bg);
+  --text-unmetered: var(--info-text);
+  --bg-daily-panel: var(--daily-bg);
+  --text-daily-label: var(--daily-text);
+  --bg-daily-occupied: var(--daily-occupied-bg);
+  --text-daily-occupied: var(--daily-occupied-text);
+  --filter-active-bg: var(--ink);
+  --filter-active-text: #FFFFFF;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-/* 给滚动条永久留位：内容变长变短时滚动条出现/消失会让整页左右晃一下 */
 html { scrollbar-gutter: stable; }
 body {
-  font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
-  background: #f4f2f8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: var(--背景);
   color: var(--文字);
   font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 顶栏 */
-.顶栏 {
-  position: sticky; top: 0; z-index: 10;
-  background: var(--主色); color: #fff;
-  padding: 10px 16px;
-  display: flex; flex-direction: column; gap: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+/* ============ 整体后台框架：左侧固定导航 + 右侧全屏内容 ============ */
+.应用壳 {
+  display: flex;
+  min-height: 100vh;
 }
-.顶栏左 { display: flex; align-items: center; gap: 8px; }
-.logo { font-size: 20px; }
-.顶栏 h1 { font-size: 18px; font-weight: 700; }
-/* 顶栏时钟：北京时间到分，等宽数字免得每分钟跳一下宽度 */
-.月份显示 { font-size: 13px; opacity: .95; margin-left: auto; background: rgba(255,255,255,.2); padding: 2px 10px; border-radius: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.顶栏下月 { margin-left: 8px; padding: 4px 12px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: rgba(255,255,255,.15); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
-.顶栏下月:hover { background: rgba(255,255,255,.3); }
 
-.导航 { display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.侧边遮罩 {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 140;
+}
+
+.侧边栏 {
+  width: 232px;
+  flex: 0 0 232px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: var(--侧边背景);
+  border-right: 1px solid var(--边框);
+  display: flex;
+  flex-direction: column;
+  z-index: 150;
+}
+
+.侧边品牌 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--边框);
+}
+.侧边品牌 .logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex: 0 0 auto;
+}
+.品牌字 { min-width: 0; flex: 1; }
+.品牌字 h1 { font-size: 17px; font-weight: 700; line-height: 1.25; color: var(--文字); }
+.品牌字 span { font-size: 11px; color: var(--次文字); display: block; margin-top: 2px; }
+.抽屉关 {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--灰);
+  color: var(--次文字);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.导航 {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 .导航 button {
-  flex: 0 0 auto; padding: 7px 14px; border: 0; border-radius: 8px;
-  background: rgba(255,255,255,.15); color: #fff; font-size: 14px; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--次文字);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s, color .14s, transform .08s;
+}
+.导航 button:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.导航 button.激活 {
+  background: var(--surface-subtle);
+  color: var(--ink);
+  font-weight: 600;
+}
+.菜单图标 { font-size: 16px; width: 22px; text-align: center; flex: 0 0 auto; }
+.菜单字 { white-space: nowrap; flex: 1; }
+.折叠箭 { font-size: 12px; color: var(--次文字); transition: transform .18s ease; flex: 0 0 auto; }
+.导航组.展开 .折叠箭 { transform: rotate(90deg); }
+.子导航 {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 4px 16px;
+}
+.导航组.展开 .子导航 { display: flex; }
+.子导航 button { padding: 8px 12px; font-size: 13px; }
+.背景预览盒 {
+  margin: 12px 0;
+  border: 1px solid var(--边框);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--灰);
+  max-width: 380px;
+}
+.背景预览盒 img, .背景预览盒 video {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+}
+
+.侧边底栏 {
+  padding: 12px 10px;
+  border-top: 1px solid var(--边框);
+}
+.退出钮 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--边框);
+  border-radius: 10px;
+  background: var(--灰);
+  color: var(--次文字);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .14s, color .14s, border-color .14s;
+}
+.退出钮:hover {
+  color: var(--红);
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+/* 右侧主体区：彻底铺满剩余屏幕，不再居中留大白边 */
+.主体区 {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.顶栏 {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 58px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--边框);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.顶栏左 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.顶栏右 { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.菜单开关 {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--边框);
+  border-radius: 10px;
+  background: var(--卡片);
+  color: var(--文字);
+  font-size: 18px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+.当前页标题 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--文字);
   white-space: nowrap;
 }
-.导航 button.激活 { background: #fff; color: var(--主色); font-weight: 700; }
-
-/* 内容 */
-main { max-width: 1000px; margin: 0 auto; padding: 16px; }
-
-/* 卡片 */
-.卡片 {
-  background: var(--卡片); border: 1px solid var(--边框);
-  border-radius: 12px; padding: 16px; margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+.月份显示 {
+  font-size: 13px;
+  color: var(--次文字);
+  background: var(--灰);
+  border: 1px solid var(--边框);
+  padding: 5px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.卡片 h2 { font-size: 17px; margin-bottom: 12px; }
-.卡片 h3 { font-size: 15px; margin: 12px 0 8px; color: var(--次文字); }
+.顶栏下月 {
+  padding: 6px 14px;
+  border: 1px solid var(--主色);
+  border-radius: 8px;
+  background: var(--主色浅);
+  color: var(--主色);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s, color .14s;
+}
+.顶栏下月:hover { background: var(--主色); color: #fff; }
 
-/* 表格 */
-.表格容器 { overflow-x: auto; }
+/* 内容区：全宽自适应 */
+main {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 20px 24px 36px;
+  flex: 1;
+}
+
+/* ============ 卡片 ============ */
+.卡片 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--阴影);
+}
+.卡片 h2 { font-size: 17px; font-weight: 700; margin-bottom: 14px; color: var(--文字); }
+.卡片 h3 { font-size: 15px; font-weight: 600; margin: 12px 0 10px; color: var(--文字); }
+
+/* ============ 表格 ============ */
+.表格容器 { overflow-x: auto; border-radius: 10px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--边框); white-space: nowrap; }
-th { background: var(--灰); font-weight: 600; position: sticky; top: 0; }
+th, td {
+  padding: 11px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--边框);
+  white-space: nowrap;
+}
+th {
+  background: var(--灰);
+  color: var(--次文字);
+  font-size: 13px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
 td.数字 { text-align: right; font-variant-numeric: tabular-nums; }
 th.数字 { text-align: right; }
 
-/* 按钮 */
+/* 表格文字链接操作列 */
+th.操作列, td.操作列 { text-align: right; }
+.文字链 {
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color .12s, background .12s;
+}
+.文字链.主 { color: var(--ink); font-weight: 600; }
+.文字链.主:hover { background: var(--surface-subtle); }
+.文字链.次 { color: var(--ink-2); font-weight: 400; }
+.文字链.次:hover { color: var(--ink); background: var(--surface-muted); }
+.文字链.危 { color: var(--ink-2); font-weight: 400; }
+.文字链.危:hover { color: var(--danger-text); background: var(--danger-bg); }
+
+/* ============ 按钮 ============ */
 .btn {
-  display: inline-block; padding: 8px 14px; border: 0; border-radius: 8px;
-  background: var(--主色); color: #fff; font-size: 14px; cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #1F2329;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .14s, transform .08s, border-color .14s;
 }
-.btn:hover { background: var(--主色深); }
-.btn.次 { background: #64748b; }
-.btn.小 { padding: 4px 10px; font-size: 13px; }
-.btn.危险 { background: var(--红); }
-.btn.成功 { background: var(--绿); }
-.btn.黄 { background: #f59e0b; }
-.btn.紫 { background: #8b5cf6; }
-.btn.行内 { padding: 3px 8px; font-size: 12px; }
+.btn:hover { background: #373C44; }
+.btn:active { transform: translateY(1px); }
+.btn.次 { background: var(--灰); color: var(--文字); border-color: var(--边框); }
+.btn.次:hover { background: #E6E3DC; }
+.btn.小 { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+.btn.危险 { background: #FAECE8; color: #A93F2B; border-color: #EBCBC3; }
+.btn.危险:hover { background: #F5DDD6; }
+.btn.成功 { background: #E9F3EC; color: #35724D; border-color: #C7E0CE; }
+.btn.成功:hover { background: #DBEBE0; }
+.btn.黄 { background: #F6EEDB; color: #8A6516; border-color: #E8D9B5; }
+.btn.黄:hover { background: #EFE3C7; }
+.btn.紫 { background: #EDEAF5; color: #5B4E8C; border-color: #D7D0EA; }
+.btn.紫:hover { background: #E3DDF0; }
+.btn.行内 { padding: 3px 9px; font-size: 12px; border-radius: 6px; }
 
-/* 表单 */
-.表单 { display: grid; gap: 10px; }
+table.斑马 tr:nth-child(even) td { background: var(--surface-muted); }
+table.斑马 tr:hover td { background: var(--surface-subtle); }
+
+/* ============ 表单（聚焦变深墨色，不用蓝色光圈） ============ */
+.表单 { display: grid; gap: 12px; }
 .表单.两列 { grid-template-columns: 1fr 1fr; }
-.表单块 { display: grid; gap: 10px; }
-.行 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.行三 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.行四 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.字段 { display: flex; flex-direction: column; gap: 4px; }
-.字段 label { font-size: 13px; color: var(--次文字); }
+.表单块 { display: grid; gap: 12px; }
+.行 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.行三 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.行四 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.字段 { display: flex; flex-direction: column; gap: 5px; }
+.字段 label { font-size: 13px; font-weight: 500; color: var(--次文字); }
 .字段 input, .字段 select {
-  padding: 8px 10px; border: 1px solid var(--边框); border-radius: 8px; font-size: 14px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color .14s;
 }
-.字段 input:focus, .字段 select:focus { outline: 2px solid var(--主色); border-color: var(--主色); }
+.字段 input:focus, .字段 select:focus {
+  outline: none;
+  border-color: var(--ink);
+}
 
-/* 核收状态徽章 */
-.徽章 { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; }
-.徽章.已核收 { background: #dcfce7; color: #15803d; }
-.徽章.未交 { background: #fee2e2; color: #b91c1c; }
-.徽章.欠款 { background: #fef9c3; color: #a16207; }
-.徽章.未出租 { background: #e2e8f0; color: #64748b; }
-.徽章.已退房 { background: #e0e7ff; color: #4f46e5; }
+/* ============ 状态（圆点 + 文字，不用底色块） ============ */
+.徽章 {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+}
+.徽章::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.徽章.已核收 { color: var(--ok-text); }
+.徽章.未交 { color: var(--danger-text); }
+.徽章.欠款 { color: var(--danger-text); }
+.徽章.未出租 { color: var(--ink-3); }
+.徽章.已退房 { color: var(--daily-text); }
 
-/* 汇总大数字 */
-.汇总网格 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.汇总项 { background: var(--灰); border-radius: 10px; padding: 14px; text-align: left; }
-.汇总项 .标签 { font-size: 13px; color: var(--次文字); }
-.汇总项 .数值 { font-size: 22px; font-weight: 700; margin-top: 4px; }
+/* ============ 汇总大数字 ============ */
+.汇总网格 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.汇总项 {
+  background: var(--灰);
+  border: 1px solid var(--边框);
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-align: left;
+}
+.汇总项 .标签 { font-size: 13px; color: var(--次文字); font-weight: 500; }
+.汇总项 .数值 { font-size: 24px; font-weight: 800; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .汇总项.收入 .数值 { color: var(--绿); }
 .汇总项.支出 .数值 { color: var(--红); }
 
-/* 工具栏 */
-.工具栏 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
-.工具栏 input, .工具栏 select { padding: 7px 10px; border: 1px solid var(--边框); border-radius: 8px; font-size: 14px; }
+/* ============ 工具栏 ============ */
+.工具栏 { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.工具栏 input, .工具栏 select {
+  padding: 8px 11px;
+  border: 1px solid var(--边框);
+  border-radius: 9px;
+  font-size: 14px;
+  background: var(--卡片);
+  color: var(--文字);
+}
+.工具栏 input:focus, .工具栏 select:focus {
+  outline: none;
+  border-color: var(--主色);
+  box-shadow: 0 0 0 3px var(--主色浅);
+}
 
 /* 提示 toast */
 .提示 {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-  background: #111827; color: #fff; padding: 10px 18px; border-radius: 8px;
-  font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 100;
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+  box-shadow: var(--阴影浮);
+  z-index: 400;
 }
 .提示.显示 { opacity: 1; }
 
-/* 空状态 */
 .空 { text-align: left; color: var(--次文字); padding: 24px 0; }
 
 /* 空置房卡片 */
 .空置网格 { display: flex; flex-wrap: wrap; gap: 10px; }
-.空置房 { background: var(--灰); padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 16px; color: var(--次文字); cursor: pointer; }
-/* 空置房点一下标脏房（黄），再点一下回净房（无色） */
-.空置房.脏 { background: #fef9c3; color: #8a6d1a; }
+.空置房 {
+  background: var(--灰);
+  border: 1px solid var(--边框);
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--文字);
+  cursor: pointer;
+  transition: transform .08s, border-color .14s;
+}
+.空置房:hover { border-color: var(--主色); transform: translateY(-1px); }
+.空置房.脏 { background: #fef9c3; border-color: #fde047; color: #854d0e; }
 
-/* 租客账单卡片 */
-.账单卡 { border: 1px solid var(--边框); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--卡片); }
-.账单卡头 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 17px; margin-bottom: 8px; }
+/* ============ 租客账单卡片 ============ */
+.账单卡 {
+  border: 1px solid var(--边框);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: var(--卡片);
+  box-shadow: var(--阴影);
+}
+.账单卡头 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 17px; margin-bottom: 10px; }
 .账单卡头 b { font-size: 19px; }
 .账单卡行 { display: flex; flex-wrap: wrap; gap: 16px; font-size: 15px; margin: 6px 0; align-items: center; }
 .账单卡行 .应付 { margin-left: auto; font-size: 16px; }
 .账单卡行 .应付 b { color: var(--主色); font-size: 20px; }
 
-/* 模态框 */
-.模态遮罩 { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
-.模态框 { background: #fff; border-radius: 14px; padding: 24px; max-width: 860px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
-.模态框 h2 { margin-bottom: 14px; font-size: 18px; }
+/* ============ 模态框 ============ */
+.模态遮罩 {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+.模态框 {
+  background: var(--卡片);
+  color: var(--文字);
+  border: 1px solid var(--边框);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 860px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--阴影浮);
+}
+.模态框 h2 { margin-bottom: 16px; font-size: 18px; font-weight: 700; }
 
-/* 「内容还没保存」确认小窗：叠在模态之上（z-index 高一档），只认按钮，
-   点小窗周围不做任何反应——省得在防误触的弹窗上再误触一次 */
-.确认遮罩 { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; }
-.确认框 { background: var(--卡片); color: var(--文字); border-radius: 14px; padding: 22px 24px; max-width: 380px; width: 100%; box-shadow: 0 12px 44px rgba(0,0,0,.4); }
+.确认遮罩 {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 16px;
+}
+.确认框 {
+  background: var(--卡片);
+  color: var(--文字);
+  border: 1px solid var(--边框);
+  border-radius: 16px;
+  padding: 22px 24px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: var(--阴影浮);
+}
 .确认框 h3 { font-size: 17px; margin-bottom: 8px; }
 .确认框 p { font-size: 14px; color: var(--次文字); margin-bottom: 16px; }
 .确认按钮组 { display: flex; flex-direction: column; gap: 8px; }
 .确认按钮组 .btn { width: 100%; }
 
 /* tab 栏 */
-.tab栏 { display: flex; gap: 8px; margin-bottom: 12px; }
-.tab栏 button { padding: 8px 18px; border: 1px solid var(--边框); border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
-.tab栏 button.激活 { background: var(--主色); color: #fff; border-color: var(--主色); font-weight: 700; }
+.tab栏 { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab栏 button {
+  padding: 8px 18px;
+  border: 1px solid var(--边框);
+  border-radius: 9px;
+  background: var(--卡片);
+  color: var(--次文字);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .14s;
+}
+.tab栏 button.激活 { background: var(--主色); color: #fff; border-color: var(--主色); }
 
 /* 楼层分组 */
-.楼层行 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--边框); }
+.楼层行 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px dashed var(--边框); }
 .楼层名 { min-width: 56px; font-weight: 700; color: var(--主色); }
 
-/* 账单底度（等宽对齐） */
+/* 账单底度 */
 .账单底度 { font-family: Consolas, "Courier New", monospace; font-size: 14px; color: var(--文字); padding: 2px 0; }
 
-/* 房租单：明细（水费/电费/备注 3 行，标签冒号对齐、金额右对齐）+ 汇总（1 行，金额加粗） */
+/* ============ 房租单明细（保持原有精确对齐） ============ */
 .房租单明细 { margin-top: 4px; }
 .明细行 { display: flex; align-items: baseline; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--边框); font-size: 14px; }
 .明细标签 { width: 180px; display: flex; align-items: baseline; font-weight: 700; color: var(--主色); white-space: nowrap; }
 .标签名 { flex: 1; text-align: justify; text-align-last: justify; text-justify: inter-ideograph; }
-/* 备注行标签没有「（单价）」尾巴，右边留一个全角字宽，让末字「息」落在水/电行「方」「度」的位置上 */
 .标签名.备注名 { padding-right: 1em; }
 .冒号 { flex: 0 0 auto; }
 .明细底度 { flex: 1; font-family: Consolas, "Courier New", monospace; color: var(--次文字); }
 .明细底度 input { width: 100%; }
-/* 实际度数（用 X 方 / 用 X 度）：放在底度与金额之间、右对齐。备注说明框是 .抄表输入 右对齐，
-   它的 padding-right(8px)+border(1px) 让 placeholder 末字「明」比框右缘靠左 9px；这里同样留 9px，
-   让实际度数的末位数字和「明」落在同一条竖线上。 */
 .明细用量 { flex: 0 0 auto; text-align: right; font-family: Consolas, "Courier New", monospace; color: var(--主色); font-weight: 600; padding-right: 9px; }
 .金额词 { width: 60px; text-align: right; white-space: nowrap; }
 .钱数 { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 .明细金额 { display: flex; align-items: baseline; gap: 6px; margin-right: 30px; color: var(--次文字); }
 .明细金额 b.钱数 { color: var(--文字); font-weight: 700; }
-/* 必须重申 width：input 同时带 .抄表输入(90px)，它比 .钱数(84px) 后定义会覆盖，导致本行「金额：」左移 6px */
-/* left:7px = 右内边距 6 + 边框 1：把输入框整体右移这么多，框里数字的个位就与上面两行金额的末位对齐（relative 不影响「金额：」的位置） */
 .明细金额 input.钱数 { width: 84px; padding: 2px 6px; position: relative; left: 7px; }
-/* 藏掉 number 的上下箭头：它会占走文字右侧的宽度让对齐算不准，hover 时还会弹出来挡住数字 */
 .明细金额 input.钱数::-webkit-outer-spin-button,
 .明细金额 input.钱数::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .明细金额 input.钱数 { -moz-appearance: textfield; appearance: textfield; }
@@ -208,12 +627,12 @@ th.数字 { text-align: right; }
 .费用项 b { color: var(--文字); font-size: 15px; }
 .账单费用行 .应付 { margin-left: auto; font-size: 16px; color: var(--主色); font-weight: 700; }
 .账单费用行 .应付 b { font-size: 20px; }
-.账单操作行 { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--边框); }
+.账单操作行 { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding-top: 10px; border-top: 1px dashed var(--边框); }
 .账单按钮 { margin-left: auto; display: flex; gap: 6px; }
 
 /* 房间详情弹框 */
 .详情格 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.详情项 { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--灰); border-radius: 8px; }
+.详情项 { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--灰); border-radius: 9px; }
 .详情键 { color: var(--次文字); font-size: 13px; white-space: nowrap; }
 .详情值 { font-weight: 600; text-align: right; }
 
@@ -222,22 +641,30 @@ th.数字 { text-align: right; }
 .隐藏项 { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--灰); border-radius: 8px; cursor: pointer; font-size: 14px; }
 .隐藏项 input { width: 16px; height: 16px; cursor: pointer; }
 
-/* 抄表输入框（未抄表） */
-.抄表输入 { width: 90px; padding: 6px 8px; border: 1px solid var(--边框); border-radius: 6px; font-size: 14px; text-align: right; }
-.抄表输入:focus { outline: 2px solid var(--主色); border-color: var(--主色); }
+/* 抄表输入框 */
+.抄表输入 {
+  width: 96px;
+  padding: 6px 8px;
+  border: 1px solid var(--边框);
+  border-radius: 7px;
+  font-size: 14px;
+  text-align: right;
+  background: var(--卡片);
+  color: var(--文字);
+}
+.抄表输入:focus { outline: none; border-color: var(--主色); box-shadow: 0 0 0 3px var(--主色浅); }
 
-/* 退房详情明细行 */
 .退房明细行 { padding: 8px 12px; background: var(--灰); border-radius: 8px; font-size: 14px; margin-top: 8px; }
 
-/* 明细表基础样式：退租结算单 + 租客账单的「专业房租单」共用 */
+/* 明细表 */
 .退租表 { width: 100%; border-collapse: collapse; font-size: 14px; }
 .退租表 th { background: var(--灰); text-align: left; }
-.退租表 th, .退租表 td { padding: 8px 10px; border-bottom: 1px solid var(--边框); }
+.退租表 th, .退租表 td { padding: 9px 10px; border-bottom: 1px solid var(--边框); }
 .退租表 td:first-child { white-space: nowrap; }
 .退租说明 { font-size: 12px; color: var(--次文字); margin-top: 3px; white-space: normal; font-weight: 400; }
 .退租小计 td { font-weight: 700; border-top: 2px solid var(--边框); }
 
-/* ---- 退租结算单（单据版式：单头 / 明细 / 合计 三段，整张一个外框）---- */
+/* 退租结算单 */
 .退租单 { border: 1px solid var(--边框); border-radius: 12px; overflow: hidden; }
 .退租单头 { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 14px 16px; background: var(--灰); border-bottom: 1px solid var(--边框); }
 .退租单号 span { display: block; font-size: 12px; color: var(--次文字); }
@@ -245,53 +672,54 @@ th.数字 { text-align: right; }
 .退租单信息 { flex: 1; min-width: 200px; display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px 16px; }
 .退租单信息 span { display: block; font-size: 12px; color: var(--次文字); }
 .退租单信息 b { font-size: 14px; font-weight: 600; word-break: break-all; }
-/* 明细区：应退/应扣两个分组头，左侧色条区分收付方向（绿=退给租客，红=从押金里扣） */
 .退租单 .退租表 th, .退租单 .退租表 td { padding: 9px 16px; }
 .退租单 .退租表 tr:last-child td { border-bottom: 0; }
 .退租组头 th { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--次文字); }
 .退租组头.应退 th:first-child { box-shadow: inset 3px 0 var(--绿); }
 .退租组头.应扣 th:first-child { box-shadow: inset 3px 0 var(--红); }
-.退租组头.应扣 th { border-top: 2px solid var(--边框); } /* 和上面的「应退小计」拉开，两块灰底不糊成一片 */
+.退租组头.应扣 th { border-top: 2px solid var(--边框); }
 .退租单 .退租小计 td { background: var(--灰); }
-/* 合计区：左边算式，右边大字实退金额 */
 .退租总 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; background: var(--灰); border-top: 2px solid var(--边框); }
 .退租总算式 { font-size: 13px; color: var(--次文字); font-variant-numeric: tabular-nums; }
 .退租总额 { margin-left: auto; display: flex; align-items: baseline; gap: 10px; }
 .退租总额 span { font-size: 15px; font-weight: 600; color: var(--文字); }
 .退租总额 b { font-size: 22px; font-weight: 800; color: var(--红); font-variant-numeric: tabular-nums; }
 .退租警告 { padding: 10px 16px; font-size: 13px; color: var(--红); background: var(--灰); border-top: 1px solid var(--边框); }
-@media (max-width: 600px) {
-  .退租单头 { gap: 10px; }
-  .退租单号 b { font-size: 24px; }
-  .退租总 { flex-direction: column; align-items: stretch; }
-  .退租总额 { margin-left: 0; justify-content: space-between; }
-}
 
-/* 通用折叠卡片头（备忘录/空置房间/房源信息共用） */
+/* 通用折叠卡片头 */
 .折叠头 { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-.折叠头 h2 { font-size: 17px; }
+.折叠头 h2 { font-size: 17px; margin-bottom: 0; }
 .折叠标 { margin-left: auto; color: var(--次文字); font-size: 13px; white-space: nowrap; flex: 0 0 auto; }
 
 /* 总览备忘录 */
-.备忘待办数 { background: #fef9c3; color: #a16207; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 12px; }
+.备忘待办数 { background: #fef9c3; color: #a16207; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
 .备忘输入行 { display: flex; gap: 8px; margin: 12px 0; }
-.备忘输入行 input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--边框); border-radius: 8px; font-size: 15px; background: var(--卡片); color: var(--文字); }
-.备忘输入行 input:focus { outline: 2px solid var(--主色); border-color: var(--主色); }
-.备忘输入行 textarea { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--边框); border-radius: 8px; font-size: 15px; background: var(--卡片); color: var(--文字); resize: vertical; font-family: inherit; line-height: 1.5; }
-.备忘输入行 textarea:focus { outline: 2px solid var(--主色); border-color: var(--主色); }
+.备忘输入行 input, .备忘输入行 textarea {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--边框);
+  border-radius: 9px;
+  font-size: 14px;
+  background: var(--卡片);
+  color: var(--文字);
+  font-family: inherit;
+  line-height: 1.5;
+}
+.备忘输入行 textarea { resize: vertical; }
+.备忘输入行 input:focus, .备忘输入行 textarea:focus { outline: none; border-color: var(--主色); box-shadow: 0 0 0 3px var(--主色浅); }
 .备忘项 { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--边框); }
 .备忘项:last-child { border-bottom: 0; }
-.备忘勾 { flex: 0 0 auto; width: 18px; height: 18px; cursor: pointer; }
+.备忘勾 { flex: 0 0 auto; width: 18px; height: 18px; cursor: pointer; accent-color: var(--主色); }
 .备忘选择 { flex: 0 0 auto; width: 18px; height: 18px; cursor: pointer; accent-color: var(--红); }
-.备忘内容 { flex: 1; min-width: 0; font-size: 15px; word-break: break-word; }
+.备忘内容 { flex: 1; min-width: 0; font-size: 14px; word-break: break-word; }
 .备忘内容.备忘可折叠 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .备忘内容.备忘展开 { white-space: normal; }
 .备忘折叠钮 { flex: 0 0 auto; background: none; border: none; color: var(--主色); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; white-space: nowrap; }
 .备忘项展开 { align-items: flex-start; }
 .备忘项展开 .备忘勾 { margin-top: 3px; }
-.备忘日期 { color: var(--次文字); font-size: 13px; white-space: nowrap; }
+.备忘日期 { color: var(--次文字); font-size: 12px; white-space: nowrap; }
 .备忘项.已完成 .备忘内容 { text-decoration: line-through; color: var(--次文字); }
-/* 备忘录 Markdown 渲染样式 */
 .备忘内容 h1, .备忘内容 h2, .备忘内容 h3, .备忘内容 h4 { margin: 6px 0 4px; font-size: 1.05em; font-weight: 700; }
 .备忘内容 p { margin: 4px 0; }
 .备忘内容 ul, .备忘内容 ol { margin: 4px 0; padding-left: 20px; }
@@ -304,197 +732,149 @@ th.数字 { text-align: right; }
 .备忘底栏 { margin-top: 10px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .备忘全选 { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--次文字); cursor: pointer; }
 
-/* 总览「待发送账单」卡片 */
+/* 待发送账单 */
 .待发送列表 { display: flex; flex-direction: column; gap: 8px; }
-.待发送行 { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--灰); border-radius: 8px; }
+.待发送行 { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--灰); border: 1px solid var(--边框); border-radius: 10px; }
 .待发送主 { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
 .待发送主 b { font-size: 16px; }
 .待发送租客 { color: var(--次文字); font-size: 13px; }
 .待发送日 { color: var(--文字); font-size: 14px; font-weight: 600; white-space: nowrap; }
 
-/* 日租账单的空白日：没客人的那天也占一行，视觉上淡一点 */
 tr.空白日 td { color: var(--次文字); opacity: .55; }
 tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 
-/* 日租图表模式：金额格虚线、从左到右、不拥挤 */
 .图表金额行 { display: flex; gap: 8px; flex-wrap: wrap; }
 .图表金额 { border: 1px dashed var(--边框); border-radius: 6px; padding: 5px 12px; min-width: 46px; text-align: center; white-space: nowrap; }
 
-@media (min-width: 720px) {
-  .顶栏 { flex-direction: row; align-items: center; }
-  .导航 { overflow-x: visible; }
-  .表单.两列 { grid-template-columns: repeat(4, 1fr); }
-}
-
-/* 小屏：表单字段单列堆叠，避免弹窗左右滑动 */
-@media (max-width: 600px) {
-  .行, .行三, .行四 { grid-template-columns: 1fr; }
-  .详情格 { grid-template-columns: 1fr; }
-}
-
-/* ============ 暗黑主题（设置 → 主题模式 → 暗黑），参考 Emby 暗黑配色 ============ */
-/* Emby 暗色：背景偏紫灰 #141318 / #1b1820，卡片深紫黑，强调色 #00a4dc 青蓝 + 绿色点缀 */
-:root[data-theme="dark"] {
-  --主色: #00a4dc;      /* Emby 强调青蓝 */
-  --主色深: #0088b8;
-  --绿: #52b54b;
-  --红: #e53935;
-  --灰: #241f2b;        /* 次级面板/表头，比卡片略浅一档 */
-  --边框: #35303d;
-  --文字: #e8e4ee;
-  --次文字: #9a94a5;
-  --卡片: #1b1820;      /* Emby 卡片深紫黑 */
-}
-:root[data-theme="dark"] body { background: #141318; }
-:root[data-theme="dark"] .顶栏 { background: #101016; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-:root[data-theme="dark"] .卡片,
-:root[data-theme="dark"] .账单卡 { background: var(--卡片); border-color: var(--边框); }
-:root[data-theme="dark"] th { background: #241f2b; }
-:root[data-theme="dark"] .汇总项,
-:root[data-theme="dark"] .空置房,
-:root[data-theme="dark"] .详情项,
-:root[data-theme="dark"] .退房明细行,
-:root[data-theme="dark"] .隐藏项 { background: var(--灰); }
-:root[data-theme="dark"] .空置房.脏 { background: #3a2f0a; color: #e3c46a; }
-:root[data-theme="dark"] .字段 input,
-:root[data-theme="dark"] .字段 select,
-:root[data-theme="dark"] .工具栏 input,
-:root[data-theme="dark"] .工具栏 select,
-:root[data-theme="dark"] .抄表输入,
-:root[data-theme="dark"] .tab栏 button { background: #141318; border-color: var(--边框); color: var(--文字); }
-:root[data-theme="dark"] .字段 input:focus,
-:root[data-theme="dark"] .字段 select:focus,
-:root[data-theme="dark"] .抄表输入:focus { outline-color: var(--主色); border-color: var(--主色); }
-:root[data-theme="dark"] .模态框 { background: #1b1820; color: var(--文字); }
-:root[data-theme="dark"] .账单备注 { background: #2a2410; border-color: #4a3d12; color: #e3c46a; }
-:root[data-theme="dark"] .备忘待办数 { background: #3a2f0a; color: #f0c542; }
-:root[data-theme="dark"] .导航 button { background: rgba(255,255,255,.07); }
-:root[data-theme="dark"] .导航 button.激活 { background: var(--主色); color: #fff; }
-:root[data-theme="dark"] .徽章.已核收 { background: #14321a; color: #6fd06f; }
-:root[data-theme="dark"] .徽章.未交 { background: #3a1515; color: #f28b82; }
-:root[data-theme="dark"] .徽章.欠款 { background: #3a2f0a; color: #f0c542; }
-:root[data-theme="dark"] .徽章.未出租 { background: #241f2b; color: #9a94a5; }
-:root[data-theme="dark"] .徽章.已退房 { background: #1f2340; color: #9ca3f5; }
-:root[data-theme="dark"] .提示 { background: #e8e4ee; color: #141318; }
-:root[data-theme="dark"] .btn.次 { background: #3a3545; }
-:root[data-theme="dark"] .btn.黄 { background: #d99a1b; }
-:root[data-theme="dark"] .btn.紫 { background: #7a5cc0; }
-
-/* 斑马纹表格：账单类宽表列多，隔行填底色，眼睛不容易串行 */
-/* 用 td 而不是 tr 上色，免得盖掉 sticky 表头；只染偶数行，奇数行保持卡片底色 */
-table.斑马 tr:nth-child(even) td { background: var(--灰); }
-table.斑马 tr:hover td { background: #e6f4fb; }        /* 悬停整行提亮，指哪读哪 */
-:root[data-theme="dark"] table.斑马 tr:hover td { background: #23303a; }
-
-/* 日租房态图（EBK 式）：一间房一张卡，颜色 = 状态。绿=在住、黄=脏房、无色=可用 */
-.房态网格 { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px; margin-top: 14px; }
+/* ============ 日租房态图 ============ */
+.房态网格 { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 14px; margin-top: 14px; }
 .房态卡 {
-  display: flex; flex-direction: column; gap: 8px; min-height: 132px;
-  padding: 12px; border: 1px solid var(--边框); border-left: 4px solid var(--边框);
-  border-radius: 12px; background: var(--卡片); color: var(--文字);
-  font-family: inherit; font-size: 14px; text-align: left; cursor: pointer;
-  transition: transform .08s, box-shadow .08s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 136px;
+  padding: 14px;
+  border: 1px solid var(--边框);
+  border-left: 4px solid var(--边框);
+  border-radius: 12px;
+  background: var(--卡片);
+  color: var(--文字);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
 }
-.房态卡:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-.房态卡.在住 { background: #dcfce7; border-color: #86d29a; border-left-color: var(--绿); }
-.房态卡.脏房 { background: #fef9c3; border-color: #e2cf72; border-left-color: #d99a1b; }
+.房态卡:hover { transform: translateY(-2px); box-shadow: var(--阴影浮); }
+.房态卡.在住 { background: #ecfdf5; border-color: #86efac; border-left-color: var(--绿); }
+.房态卡.脏房 { background: #fefce8; border-color: #fde047; border-left-color: #eab308; }
 .房态卡头 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .房态卡头 b { font-size: 20px; font-weight: 800; letter-spacing: .5px; }
 .房态卡身 { display: flex; flex-direction: column; gap: 3px; }
-.房态签 { padding: 2px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.房态签.在住 { background: #15803d; color: #fff; }
-.房态签.脏房 { background: #a16207; color: #fff; }
-.房态签.空闲 { background: var(--灰); color: var(--次文字); }
+.房态签 { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.房态签.在住 { background: #16a34a; color: #fff; }
+.房态签.脏房 { background: #ca8a04; color: #fff; }
+.房态签.空闲 { background: var(--灰); color: var(--次文字); border: 1px solid var(--边框); }
 .房态客人 { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .房态客人.淡 { color: var(--次文字); font-weight: 600; }
 .房态行 { font-size: 12px; color: var(--次文字); }
-.房态卡.在住 .房态行, .房态卡.脏房 .房态行 { color: #4a4a4a; }
-.房态行.警 { color: #b91c1c; font-weight: 600; }
+.房态卡.在住 .房态行, .房态卡.脏房 .房态行 { color: #334155; }
+.房态行.警 { color: var(--红); font-weight: 600; }
 .房态行.淡 { opacity: .75; }
-.房态钱 { margin-top: 2px; font-size: 16px; font-weight: 800; color: #15803d; }
-/* 暗黑：卡片底色压深，文字反过来提亮 */
-:root[data-theme="dark"] .房态卡.在住 { background: #14321a; border-color: #2c5c34; }
-:root[data-theme="dark"] .房态卡.脏房 { background: #3a2f0a; border-color: #6b5613; }
-:root[data-theme="dark"] .房态卡.在住 .房态行,
-:root[data-theme="dark"] .房态卡.脏房 .房态行 { color: #c9c3d3; }
-:root[data-theme="dark"] .房态签.在住 { background: #6fd06f; color: #10240f; }
-:root[data-theme="dark"] .房态签.脏房 { background: #f0c542; color: #2a2410; }
-:root[data-theme="dark"] .房态钱 { color: #6fd06f; }
-:root[data-theme="dark"] .房态行.警 { color: #f28b82; }
+.房态钱 { margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--绿); }
 
-/* 办入住第一步：全日房 / 钟点房，两张图标卡二选一 */
+/* 办入住第一步 */
 .房型区 { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
 .房型选 { display: flex; gap: 10px; }
 .房型卡 {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  width: 104px; padding: 12px 8px;
-  border: 2px solid var(--边框); border-radius: 12px;
-  background: var(--卡片); color: var(--文字);
-  font-family: inherit; cursor: pointer; transition: border-color .1s, background .1s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 108px;
+  padding: 12px 8px;
+  border: 2px solid var(--边框);
+  border-radius: 12px;
+  background: var(--卡片);
+  color: var(--文字);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
 }
 .房型卡:hover { border-color: var(--主色); }
-.房型卡.选中 { border-color: var(--主色); background: rgba(0,164,220,.10); }
+.房型卡.选中 { border-color: var(--主色); background: var(--主色浅); }
 .房型图 { font-size: 26px; line-height: 1; }
 .房型名 { font-size: 14px; font-weight: 600; }
 .房型卡.选中 .房型名 { color: var(--主色); }
-:root[data-theme="dark"] .房型卡.选中 { background: rgba(0,164,220,.18); }
 
-/* 办入住的多客人登记：一位一行，末尾是 +/− */
 .客人行 { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto; gap: 8px; align-items: end; margin-bottom: 8px; }
-.客人加减 { padding: 8px 14px; font-size: 18px; line-height: 1; height: 38px; }
-@media (max-width: 600px) {
-  .客人行 { grid-template-columns: 1fr 1fr; }
-  .客人加减 { grid-column: 2; justify-self: end; }
-}
-/* 重名客人选择：一张一张列出来点选 */
+.客人加减 { padding: 8px 14px; font-size: 18px; line-height: 1; height: 40px; }
 .客人候选区 { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; margin-bottom: 12px; }
 .客人候选 {
-  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px 12px;
-  border: 1px solid var(--边框); border-radius: 10px; background: var(--卡片); color: var(--文字);
-  font-family: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--边框);
+  border-radius: 10px;
+  background: var(--卡片);
+  color: var(--文字);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
 }
 .客人候选:hover { border-color: var(--主色); background: var(--灰); }
 .客人候选行 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .客人候选行 b { font-size: 15px; }
 .客人候选行 span { color: var(--次文字); }
 .客人候选行 i { color: var(--次文字); font-style: normal; font-size: 12px; }
-/* 房态卡上的「3人」小标 */
-.房态人数 { margin-left: 6px; padding: 1px 7px; border-radius: 10px; background: rgba(0,0,0,.12); font-size: 12px; font-weight: 600; }
-:root[data-theme="dark"] .房态人数 { background: rgba(255,255,255,.16); }
+.房态人数 { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: rgba(15, 23, 42, 0.10); font-size: 12px; font-weight: 600; }
 
-/* 设置页：左目录树 + 右详情。只用 CSS 变量，暗黑自动跟随 */
-.设置布局 { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 14px; align-items: start; }
+/* ============ 设置页 ============ */
+.设置布局 { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; align-items: start; }
 .设置目录 {
-  display: flex; flex-direction: column; gap: 4px;
-  background: var(--卡片); border: 1px solid var(--边框); border-radius: 12px;
-  padding: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
-  /* 不用 sticky：详情区高度差很大（主题页很矮、参数页很长），吸附定位在切换时会跟着上下弹 */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--卡片);
+  border: 1px solid var(--边框);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: var(--阴影);
 }
 .设置项 {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 9px 10px; border: 0; border-left: 3px solid transparent; border-radius: 8px;
-  background: transparent; color: var(--文字); font-family: inherit; font-size: 14px;
-  text-align: left; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--次文字);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
 }
-.设置项:hover { background: var(--灰); }
-.设置项.激活 { background: var(--灰); border-left-color: var(--主色); }
+.设置项:hover { background: var(--灰); color: var(--文字); }
+.设置项.激活 { background: var(--主色浅); border-left-color: var(--主色); color: var(--主色); }
 .设置项.激活 .设置项文字 b { color: var(--主色); }
 .设置项图标 { font-size: 17px; flex: 0 0 auto; line-height: 1; }
 .设置项文字 { min-width: 0; }
 .设置项文字 b { font-size: 14px; font-weight: 600; white-space: nowrap; }
 .设置详情 > .卡片:last-child { margin-bottom: 0; }
-/* 窄屏：目录改成顶部横向滚动条，副标题省掉 */
-@media (max-width: 760px) {
-  .设置布局 { grid-template-columns: 1fr; }
-  .设置目录 { position: static; flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px; }
-  .设置项 { flex: 0 0 auto; width: auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; }
-  .设置项.激活 { border-left-color: transparent; border-bottom-color: var(--主色); }
-}
 
-/* 更新日志弹窗：内容多了在框内滚动，标题和关闭按钮不跟着跑 */
+/* 日志区 */
 .日志滚动区 {
-  max-height: 60vh; overflow-y: auto;
-  background: var(--灰); border: 1px solid var(--边框); border-radius: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--灰);
+  border: 1px solid var(--边框);
+  border-radius: 10px;
   padding: 12px 14px;
 }
 .日志段 { padding: 8px 0; border-bottom: 1px dashed var(--边框); }
@@ -504,25 +884,371 @@ table.斑马 tr:hover td { background: #e6f4fb; }        /* 悬停整行提亮�
 .日志段头 span { font-size: 12px; color: var(--次文字); }
 .日志段 ul { list-style: disc; margin: 6px 0 0 20px; font-size: 13px; }
 .日志段 li { margin: 3px 0; }
-
-/* 在线更新卡片：只用现有 CSS 变量，暗黑模式自动跟随，不用额外写覆盖规则 */
 .更新日志区 {
-  background: var(--灰); border: 1px solid var(--边框); border-radius: 8px;
-  padding: 10px 12px; margin-top: 8px; font-size: 13px;
-  max-height: 220px; overflow-y: auto;
+  background: var(--灰);
+  border: 1px solid var(--边框);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  max-height: 220px;
+  overflow-y: auto;
 }
 .更新日志区 div { padding: 2px 0; }
 .更新日志区 ul { list-style: disc; }
 .更新日志区 li { margin: 2px 0; }
 
-/* 预缴免缴月份：房租/管理费列显示「已预缴」而不是 0 */
 .已预缴 {
   display: inline-block;
-  padding: 1px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   color: var(--绿);
   background: color-mix(in srgb, var(--绿) 14%, transparent);
   white-space: nowrap;
+}
+
+/* ============ 响应式断点 ============ */
+@media (min-width: 900px) {
+  .表单.两列 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* 手机端 / 平板窄屏：侧边栏变抽屉 + 触控加大 */
+@media (max-width: 860px) {
+  .侧边栏 {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform .24s cubic-bezier(.22, 1, .36, 1);
+    box-shadow: var(--阴影浮);
+  }
+  body.抽屉开 .侧边栏 { transform: translateX(0); }
+  body.抽屉开 .侧边遮罩 { display: block; }
+  .抽屉关 { display: flex; align-items: center; justify-content: center; }
+  .菜单开关 { display: inline-flex; }
+
+  .顶栏 { padding: 0 14px; height: 54px; }
+  .月份显示 { font-size: 12px; padding: 4px 10px; }
+  .顶栏下月 { padding: 5px 10px; font-size: 12px; }
+  main { padding: 14px 12px 28px; }
+  .卡片 { padding: 14px; border-radius: 12px; margin-bottom: 14px; }
+  .导航 button { padding: 12px 14px; font-size: 15px; }
+  .btn { min-height: 40px; }
+  .btn.小, .btn.行内 { min-height: 32px; }
+  .设置布局 { grid-template-columns: 1fr; }
+  .设置目录 { flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px; }
+  .设置项 { flex: 0 0 auto; width: auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; }
+  .设置项.激活 { border-left-color: transparent; border-bottom-color: var(--主色); }
+}
+
+@media (max-width: 600px) {
+  .行, .行三, .行四 { grid-template-columns: 1fr; }
+  .详情格 { grid-template-columns: 1fr; }
+  .客人行 { grid-template-columns: 1fr 1fr; }
+  .客人加减 { grid-column: 2; justify-self: end; }
+  .退租单头 { gap: 10px; }
+  .退租单号 b { font-size: 24px; }
+  .退租总 { flex-direction: column; align-items: stretch; }
+  .退租总额 { margin-left: 0; justify-content: space-between; }
+  .汇总网格 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .汇总项 { padding: 12px; }
+  .汇总项 .数值 { font-size: 20px; }
+  .明细行 { flex-wrap: wrap; gap: 6px 10px; padding: 10px 8px; }
+  .明细标签 { width: auto; }
+  .明细金额 { margin-right: 0; margin-left: auto; }
+  .汇总行 .应付 { margin-right: 0; }
+}
+
+/* ============ 暗黑主题（现代极简石板深色） ============ */
+:root[data-theme="dark"] {
+  --bg: #131417;
+  --surface: #1B1D21;
+  --surface-muted: #1E2025;
+  --surface-subtle: #23252A;
+  --border: #2A2D33;
+  --ink: #E8E8E6;
+  --ink-2: #9CA3AF;
+  --ink-3: #7C8087;
+
+  --danger-bg: rgba(224, 108, 86, .15);
+  --danger-text: #F0907D;
+  --danger-border: rgba(224, 108, 86, .38);
+  --warn-bg: rgba(214, 166, 64, .13);
+  --warn-text: #E0B766;
+  --info-bg: rgba(96, 148, 214, .14);
+  --info-text: #8DB4E8;
+  --daily-bg: rgba(124, 107, 184, .14);
+  --daily-occupied-bg: rgba(124, 107, 184, .30);
+  --daily-text: #B5A8E8;
+  --daily-occupied-text: #C9BFF0;
+  --ok-bg: rgba(107, 191, 138, .16);
+  --ok-text: #6BBF8A;
+
+  --主色: var(--ink);
+  --主色深: #FFFFFF;
+  --主色浅: var(--surface-subtle);
+  --绿: var(--ok-text);
+  --红: var(--danger-text);
+  --背景: var(--bg);
+  --灰: var(--surface-muted);
+  --边框: var(--border);
+  --文字: var(--ink);
+  --次文字: var(--ink-3);
+  --卡片: var(--surface);
+  --侧边背景: #16181C;
+  --阴影: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --阴影浮: 0 14px 36px rgba(0, 0, 0, 0.55);
+
+  --bg-page: var(--bg);
+  --bg-card: var(--surface);
+  --border-card: var(--border);
+  --text-main: var(--ink);
+  --text-sub: var(--ink-3);
+  --bg-vacant: #16171A;
+  --text-vacant: #52565D;
+  --bg-arrears: var(--danger-bg);
+  --text-arrears: var(--danger-text);
+  --border-unpaid: var(--danger-border);
+  --bg-dirty: var(--warn-bg);
+  --text-dirty: var(--warn-text);
+  --bg-unmetered: var(--info-bg);
+  --text-unmetered: var(--info-text);
+  --bg-daily-panel: var(--daily-bg);
+  --text-daily-label: var(--daily-text);
+  --bg-daily-occupied: var(--daily-occupied-bg);
+  --text-daily-occupied: var(--daily-occupied-text);
+  --filter-active-bg: var(--ink);
+  --filter-active-text: #131417;
+}
+:root[data-theme="dark"] .顶栏 {
+  background: rgba(15, 23, 42, 0.88);
+}
+:root[data-theme="dark"] .空置房.脏 { background: #3a2f0a; border-color: #6b5613; color: #facc15; }
+:root[data-theme="dark"] .账单备注 { background: #2a2410; border-color: #4a3d12; color: #e3c46a; }
+:root[data-theme="dark"] .备忘待办数 { background: #3a2f0a; color: #facc15; }
+:root[data-theme="dark"] .btn { background: #E8E8E6; color: #131417; }
+:root[data-theme="dark"] .btn:hover { background: #FFFFFF; }
+:root[data-theme="dark"] .btn.次 { background: #23252A; color: #E8E8E6; border-color: #2A2D33; }
+:root[data-theme="dark"] .btn.次:hover { background: #2D3037; }
+:root[data-theme="dark"] .btn.危险 { background: rgba(224, 108, 86, 0.16); color: #F0907D; border-color: rgba(224, 108, 86, 0.35); }
+:root[data-theme="dark"] .btn.成功 { background: rgba(107, 191, 138, 0.16); color: #6BBF8A; border-color: rgba(107, 191, 138, 0.32); }
+:root[data-theme="dark"] .btn.黄 { background: rgba(214, 166, 64, 0.15); color: #E0B766; border-color: rgba(214, 166, 64, 0.32); }
+:root[data-theme="dark"] .btn.紫 { background: rgba(124, 107, 184, 0.22); color: #C9BFF0; border-color: rgba(124, 107, 184, 0.40); }
+:root[data-theme="dark"] .提示 { background: #f1f5f9; color: #0f172a; }
+:root[data-theme="dark"] .房态卡.在住 { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.35); }
+:root[data-theme="dark"] .房态卡.脏房 { background: rgba(234, 179, 8, 0.12); border-color: rgba(234, 179, 8, 0.35); }
+:root[data-theme="dark"] .房态卡.在住 .房态行,
+:root[data-theme="dark"] .房态卡.脏房 .房态行 { color: #cbd5e1; }
+:root[data-theme="dark"] .房态签.在住 { background: #22c55e; color: #052e16; }
+:root[data-theme="dark"] .房态签.脏房 { background: #eab308; color: #1c1917; }
+:root[data-theme="dark"] .房态人数 { background: rgba(255, 255, 255, 0.14); }
+
+/* ============ 总览双栏 + 楼层房态工作台 ============ */
+.总览双栏 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+.总览左栏 { min-width: 0; }
+.总览右栏 { min-width: 0; }
+.总览收支网格 { grid-template-columns: 1fr 1fr; gap: 10px; }
+.总览收支网格 .汇总项 { padding: 12px 14px; }
+.总览收支网格 .汇总项 .数值 { font-size: 20px; }
+.总览合计项 { grid-column: 1 / -1; }
+.总览合计项 .数值 { font-size: 23px !important; color: var(--主色); }
+
+.工作台头 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.筛选栏 { display: flex; flex-wrap: wrap; gap: 6px; }
+.筛选丸 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border-card);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-sub);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .14s;
+}
+.筛选丸:hover { border-color: var(--text-sub); color: var(--text-main); }
+.筛选丸.激活 { background: var(--filter-active-bg); border-color: var(--filter-active-bg); color: var(--filter-active-text); font-weight: 600; }
+.筛选丸.零数 { opacity: 0.42; }
+.图例点 { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+.图例点.点红 { background: var(--text-arrears); }
+.图例点.点蓝 { background: var(--text-unmetered); }
+.图例点.点绿 { background: #22c55e; }
+.图例点.点灰 { background: var(--text-vacant); }
+.图例点.点琥珀 { background: var(--text-dirty); }
+.图例点.点紫 { background: var(--text-daily-label); }
+
+.工作台外框 {
+  background: transparent;
+  min-width: 0;
+  padding-right: 4px;
+}
+.工作台楼层 {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 4px 0;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+.工作台楼层.日租楼层底板 {
+  background: var(--bg-daily-panel);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+.楼层标 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  padding-top: 6px;
+}
+.楼层标.日租楼层 { color: var(--text-daily-label); }
+.楼层标 span {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+  opacity: .8;
+  margin-top: 2px;
+}
+
+.房卡网格 {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+@media (max-width: 1360px) {
+  .房卡网格 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+
+/* 统一两行结构：第一行左房号右金额；第二行左日期租客右圆点状态 */
+.房卡 {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .1s, box-shadow .12s;
+}
+.房卡:hover { transform: translateY(-2px); box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.12); }
+.房卡顶 { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; }
+.房卡顶 b { font-size: 16px; font-weight: 500; letter-spacing: .2px; color: inherit; }
+.房卡钱 {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.房卡底 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.房卡左 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.状态点标 {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.状态点标 i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+/* 各状态语义配色（全部走 CSS 变量，自动适配深浅主题） */
+.房卡.已核收 { background: var(--bg-card); border-color: var(--border-card); color: var(--text-main); }
+
+.房卡.欠费 { background: var(--bg-arrears); color: var(--text-arrears); }
+.房卡.欠费 .房卡钱,
+.房卡.欠费 .房卡底,
+.房卡.欠费 .状态点标 { color: var(--text-arrears); }
+
+.房卡.未交 { background: var(--bg-card); border-color: var(--border-unpaid); color: var(--text-arrears); }
+.房卡.未交 .房卡钱,
+.房卡.未交 .状态点标 { color: var(--text-arrears); }
+
+.房卡.未抄,
+.房卡.待发 { background: var(--bg-unmetered); color: var(--text-unmetered); }
+.房卡.未抄 .房卡钱,
+.房卡.未抄 .房卡底,
+.房卡.待发 .房卡钱,
+.房卡.待发 .房卡底 { color: var(--text-unmetered); }
+
+.房卡.空置净,
+.房卡.自住 { background: var(--bg-vacant); color: var(--text-vacant); }
+.房卡.空置净 .房卡底,
+.房卡.自住 .房卡底 { color: var(--text-vacant); }
+
+.房卡.空置脏,
+.房卡.日租脏房 { background: var(--bg-dirty); color: var(--text-dirty); }
+.房卡.空置脏 .房卡底,
+.房卡.日租脏房 .房卡底 { color: var(--text-dirty); }
+
+.房卡.日租空闲 { background: var(--bg-card); border-color: var(--border-card); color: var(--text-daily-label); }
+.房卡.日租空闲 .状态点标 { color: var(--text-daily-label); }
+
+.房卡.日租在住 { background: var(--bg-daily-occupied); color: var(--text-daily-occupied); }
+.房卡.日租在住 .房卡钱,
+.房卡.日租在住 .房卡底,
+.房卡.日租在住 .状态点标 { color: var(--text-daily-occupied); }
+
+@media (max-width: 1100px) {
+  .总览双栏 { grid-template-columns: 1fr; }
+  .总览右栏 { order: -1; }
+}
+@media (max-width: 600px) {
+  .工作台楼层 { grid-template-columns: 1fr; gap: 6px; }
+  .楼层标 { display: flex; align-items: baseline; gap: 8px; padding-top: 0; }
+  .楼层标 span { display: inline; }
+  .房卡网格 { grid-template-columns: repeat(2, 1fr); gap: 8px; }
 }

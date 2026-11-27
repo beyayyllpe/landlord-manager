@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>登录 - 租房管家</title>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('主题') === '暗黑') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --glass: rgba(255, 255, 255, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.55);
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --sub: #475569;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --input-bg: rgba(248, 250, 252, 0.85);
+      --danger-bg: rgba(254, 242, 242, 0.92);
+      --danger-border: #fecaca;
+      --danger-text: #dc2626;
+      --shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.05);
+    }
+    :root[data-theme="dark"] {
+      --bg: #0b1120;
+      --card: #111827;
+      --glass: rgba(15, 23, 42, 0.66);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --border: #1f2937;
+      --text: #f1f5f9;
+      --sub: #cbd5e1;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --input-bg: rgba(30, 41, 59, 0.72);
+      --danger-bg: rgba(239, 68, 68, 0.18);
+      --danger-border: rgba(239, 68, 68, 0.42);
+      --danger-text: #fca5a5;
+      --shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 4vw, 36px);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--text);
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(at 15% 15%, rgba(37, 99, 235, 0.16) 0px, transparent 50%),
+        radial-gradient(at 85% 85%, rgba(14, 165, 233, 0.14) 0px, transparent 50%);
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* 全屏自适应背景容器（适配手机竖屏、笔记本、2K/4K 宽屏） */
+    .背景层 {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+    .背景层.就绪 { opacity: 1; }
+    .背景层 img,
+    .背景层 video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+    .背景遮罩 {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: radial-gradient(circle at center, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0.48));
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+    body.有背景 .背景遮罩 { opacity: 1; }
+
+    /* 毛玻璃登录卡片 */
+    .登录卡 {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: min(410px, 100%);
+      background: var(--card);
+      border-radius: 22px;
+      padding: clamp(26px, 4vw, 36px) clamp(22px, 4vw, 32px);
+      box-shadow: var(--shadow);
+      animation: 淡入 .28s ease-out;
+    }
+    body.有背景 .登录卡 {
+      background: var(--glass);
+      backdrop-filter: blur(22px) saturate(165%);
+      -webkit-backdrop-filter: blur(22px) saturate(165%);
+      border: 1px solid var(--glass-border);
+    }
+    @keyframes 淡入 {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .品牌 {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 26px;
+    }
+    .图标框 {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #2563eb, #0ea5e9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      box-shadow: 0 10px 24px -6px rgba(37, 99, 235, 0.45);
+      margin-bottom: 14px;
+    }
+    .品牌 h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .品牌 p {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--sub);
+    }
+    .表单组 { margin-bottom: 18px; }
+    .表单组 label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--sub);
+      margin-bottom: 7px;
+    }
+    .输入盒 { position: relative; display: flex; align-items: center; }
+    .输入盒 input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    body.有背景 .输入盒 input {
+      border-color: rgba(148, 163, 184, 0.35);
+    }
+    .输入盒 input.带按钮 { padding-right: 46px; }
+    .输入盒 input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: var(--card);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+    }
+    .显隐钮 {
+      position: absolute;
+      right: 8px;
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--sub);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .显隐钮:hover { background: rgba(148, 163, 184, 0.18); color: var(--text); }
+    .错误条 {
+      display: none;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      color: var(--danger-text);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .错误条.显示 { display: block; animation: 抖动 .25s ease; }
+    @keyframes 抖动 {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    .登录钮 {
+      width: 100%;
+      height: 46px;
+      margin-top: 4px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .08s, box-shadow .15s;
+      box-shadow: 0 8px 20px -6px rgba(37, 99, 235, 0.5);
+    }
+    .登录钮:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+    .登录钮:active:not(:disabled) { transform: translateY(0); }
+    .登录钮:disabled { opacity: 0.7; cursor: not-allowed; }
+    .底注 {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--sub);
+    }
+    /* 大屏 2K/4K 时适度放大卡片比例，视觉更均衡 */
+    @media (min-width: 1800px) {
+      .登录卡 { max-width: 440px; padding: 40px 36px 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="背景层" id="背景层" aria-hidden="true"></div>
+  <div class="背景遮罩" aria-hidden="true"></div>
+
+  <div class="登录卡">
+    <div class="品牌">
+      <div class="图标框">🏠</div>
+      <h1>租房管家</h1>
+      <p>请登录您的管理账号以继续</p>
+    </div>
+
+    <form id="登录表单" autocomplete="on">
+      <div class="错误条" id="错误条" role="alert"></div>
+
+      <div class="表单组">
+        <label for="用户名">用户名</label>
+        <div class="输入盒">
+          <input id="用户名" name="username" type="text" autocomplete="username" placeholder="请输入用户名" required autofocus>
+        </div>
+      </div>
+
+      <div class="表单组">
+        <label for="密码">密码</label>
+        <div class="输入盒">
+          <input id="密码" name="password" class="带按钮" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+          <button type="button" class="显隐钮" id="切换显隐" title="显示或隐藏密码" aria-label="显示或隐藏密码">👁</button>
+        </div>
+      </div>
+
+      <button type="submit" class="登录钮" id="登录钮">登 录</button>
+    </form>
+
+    <div class="底注">安全会话 · 7 天内免重复登录</div>
+  </div>
+
+  <script>
+    (async function 加载自定义背景() {
+      try {
+        const meta = await fetch('/api/login-bg/meta').then(r => r.json());
+        if (!meta || !meta.hasBg) return;
+        const 层 = document.getElementById('背景层');
+        const url = '/api/login-bg?t=' + Date.now();
+        if (meta.kind === 'video') {
+          const v = document.createElement('video');
+          v.src = url;
+          v.autoplay = true;
+          v.muted = true;
+          v.loop = true;
+          v.playsInline = true;
+          v.addEventListener('loadeddata', () => {
+            document.body.classList.add('有背景');
+            层.classList.add('就绪');
+          });
+          层.appendChild(v);
+        } else {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          img.addEventListener('load', () => {
+            document.body.classList.add('有背景');
+            层.classList.add('就绪');
+          });
+          层.appendChild(img);
+        }
+      } catch (e) {}
+    })();
+
+    const 表单 = document.getElementById('登录表单');
+    const 错误条 = document.getElementById('错误条');
+    const 登录钮 = document.getElementById('登录钮');
+    const 密码框 = document.getElementById('密码');
+    const 切换显隐 = document.getElementById('切换显隐');
+
+    切换显隐.addEventListener('click', () => {
+      const 显示 = 密码框.type === 'password';
+      密码框.type = 显示 ? 'text' : 'password';
+      切换显隐.textContent = 显示 ? '🙈' : '👁';
+    });
+
+    function 报错(msg) {
+      错误条.textContent = msg;
+      错误条.classList.remove('显示');
+      void 错误条.offsetWidth;
+      错误条.classList.add('显示');
+    }
+
+    表单.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      错误条.classList.remove('显示');
+      const 用户名 = document.getElementById('用户名').value.trim();
+      const 密码 = 密码框.value;
+      if (!用户名 || !密码) { 报错('请填写用户名和密码'); return; }
+
+      登录钮.disabled = true;
+      登录钮.textContent = '正在验证...';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 用户名, 密码 })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.错误) {
+          报错(data.错误 || '登录失败，请重试');
+          登录钮.disabled = false;
+          登录钮.textContent = '登 录';
+          密码框.focus();
+          密码框.select();
+          return;
+        }
+        location.replace('/');
+      } catch (err) {
+        报错('网络异常，请检查连接后重试');
+        登录钮.disabled = false;
+        登录钮.textContent = '登 录';
+      }
+    });
+  </script>
+</body>
+</html>
