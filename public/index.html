@@ -12,7 +12,9 @@
 
     <aside class="侧边栏" id="侧边栏">
       <div class="侧边品牌">
-        <span class="logo">🏠</span>
+        <span class="logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/><path d="M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6"/></svg>
+        </span>
         <div class="品牌字">
           <h1>租房管家</h1>
           <span>房源 · 账单 · 房态</span>
@@ -21,38 +23,72 @@
       </div>
 
       <nav class="导航" id="导航">
-        <button data-page="总览" class="激活"><span class="菜单图标">📊</span><span class="菜单字">总览</span></button>
-        <button data-page="房间"><span class="菜单图标">🚪</span><span class="菜单字">房间档案</span></button>
-        <button data-page="抄表"><span class="菜单图标">💧</span><span class="菜单字">水电抄表</span></button>
-        <button data-page="账单"><span class="菜单图标">🧾</span><span class="菜单字">租客账单</span></button>
-        <button data-page="月租"><span class="菜单图标">📅</span><span class="菜单字">月租</span></button>
-        <button data-page="日租"><span class="菜单图标">🛏️</span><span class="菜单字">日租</span></button>
-        <button data-page="退房"><span class="菜单图标">🧳</span><span class="菜单字">退房</span></button>
-        <button data-page="收支"><span class="菜单图标">💸</span><span class="菜单字">支出</span></button>
-        <button data-page="月度账单"><span class="菜单图标">📈</span><span class="菜单字">账单</span></button>
-        <div class="导航组" id="设置菜单组">
-          <button type="button" class="组头" id="设置折叠钮">
-            <span class="菜单图标">⚙️</span><span class="菜单字">设置</span><span class="折叠箭">▸</span>
-          </button>
-          <div class="子导航" id="设置子导航">
-            <button data-page="设置" data-setting="主题"><span class="菜单图标">🎨</span><span class="菜单字">主题模式</span></button>
-            <button data-page="设置" data-setting="安全"><span class="菜单图标">🔒</span><span class="菜单字">安全设置</span></button>
-            <button data-page="设置" data-setting="导出"><span class="菜单图标">📦</span><span class="菜单字">导出</span></button>
-            <button data-page="设置" data-setting="参数"><span class="菜单图标">🛠️</span><span class="菜单字">参数</span></button>
-            <button data-page="设置" data-setting="关于"><span class="菜单图标">ℹ️</span><span class="菜单字">关于</span></button>
-          </div>
-        </div>
+        <button data-page="总览" class="激活">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>
+          <span class="菜单字">总览</span>
+        </button>
+        <button data-page="房间">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></span>
+          <span class="菜单字">房间档案</span>
+        </button>
+        <button data-page="抄表">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg></span>
+          <span class="菜单字">水电抄表</span>
+        </button>
+        <button data-page="账单">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg></span>
+          <span class="菜单字">租客账单</span>
+        </button>
+        <button data-page="月租">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></span>
+          <span class="菜单字">月租</span>
+        </button>
+        <button data-page="日租">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
+          <span class="菜单字">日租</span>
+        </button>
+        <button data-page="退房">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg></span>
+          <span class="菜单字">退房</span>
+        </button>
+        <button data-page="收支">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg></span>
+          <span class="菜单字">支出</span>
+        </button>
+        <button data-page="月度账单">
+          <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>
+          <span class="菜单字">汇总</span>
+        </button>
       </nav>
 
       <div class="侧边底栏">
-        <button type="button" class="退出钮" id="退出登录"><span>🚪</span><span>退出登录</span></button>
+        <div class="导航组" id="设置菜单组">
+          <button type="button" class="组头" id="设置折叠钮">
+            <span class="菜单图标"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <span class="菜单字">设置</span>
+            <span class="折叠箭">▸</span>
+          </button>
+          <div class="子导航" id="设置子导航">
+            <button data-page="设置" data-setting="主题"><span class="菜单字">主题模式</span></button>
+            <button data-page="设置" data-setting="安全"><span class="菜单字">安全设置</span></button>
+            <button data-page="设置" data-setting="导出"><span class="菜单字">导出</span></button>
+            <button data-page="设置" data-setting="参数"><span class="菜单字">参数</span></button>
+            <button data-page="设置" data-setting="关于"><span class="菜单字">关于</span></button>
+          </div>
+        </div>
+        <button type="button" class="退出钮" id="退出登录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+          <span>退出登录</span>
+        </button>
       </div>
     </aside>
 
     <div class="主体区">
       <header class="顶栏">
         <div class="顶栏左">
-          <button type="button" class="菜单开关" id="菜单开关" aria-label="打开菜单">☰</button>
+          <button type="button" class="菜单开关" id="菜单开关" aria-label="打开菜单">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          </button>
           <span class="当前页标题" id="当前页标题">总览</span>
         </div>
         <div class="顶栏右">
@@ -61,11 +97,22 @@
       </header>
 
       <main id="内容"></main>
+      <footer class="主站备案底栏" id="主站备案底栏"></footer>
     </div>
   </div>
 
   <div class="提示" id="提示"></div>
 
-  <script src="app.js?v=__版本__"></script>
+  <script src="js/core.js?v=__版本__"></script>
+  <script src="js/overview.js?v=__版本__"></script>
+  <script src="js/rooms.js?v=__版本__"></script>
+  <script src="js/meters.js?v=__版本__"></script>
+  <script src="js/bills.js?v=__版本__"></script>
+  <script src="js/summary.js?v=__版本__"></script>
+  <script src="js/daily.js?v=__版本__"></script>
+  <script src="js/checkouts.js?v=__版本__"></script>
+  <script src="js/transactions.js?v=__版本__"></script>
+  <script src="js/settings.js?v=__版本__"></script>
+  <script src="js/main.js?v=__版本__"></script>
 </body>
 </html>

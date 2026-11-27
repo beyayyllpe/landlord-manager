@@ -7,8 +7,9 @@ const { execFile, execFileSync } = require('child_process');
 
 const app = express();
 
-const 数据目录 = path.join(__dirname, 'data');
+const 数据目录 = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
 const 数据文件 = path.join(数据目录, '数据.json');
+const 每日备份目录 = path.join(数据目录, '备份', 'daily');
 
 // ============ 在线更新：版本读取 ============
 let 版本缓存 = null;
@@ -255,7 +256,28 @@ app.post('/api/login', async (req, res) => {
   if (登录校验并发 >= 2) return res.status(429).json({ 错误: '登录请求过于频繁，请稍后再试' });
   登录校验并发++;
   try {
-    const { 用户名, 密码 } = req.body || {};
+    const { 用户名, 密码, turnstileToken } = req.body || {};
+    // 若已配置 Cloudflare Turnstile（SiteKey 与 SecretKey 均非空），先验人机令牌再验密码
+    const s = (读数据() || {}).settings || {};
+    const tsSite = String(s.TurnstileSiteKey || '').trim();
+    const tsSecret = String(s.TurnstileSecretKey || '').trim();
+    if (tsSite && tsSecret) {
+      const token = String(turnstileToken || '').trim();
+      if (!token) return res.status(400).json({ 错误: '请先完成人机验证' });
+      try {
+        const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ secret: tsSecret, response: token }),
+          signal: AbortSignal.timeout(8000),
+        }).then(r => r.json());
+        if (!vr || vr.success !== true) {
+          return res.status(403).json({ 错误: '人机验证未通过，请重试' });
+        }
+      } catch (e) {
+        return res.status(503).json({ 错误: '人机验证服务连接超时，请稍后再试' });
+      }
+    }
     const 凭据 = 读凭据();
     if (校验凭据(String(用户名 || '').trim(), String(密码 || ''))) {
       写登录Cookie(res, req, 签发会话Token(凭据));
@@ -316,6 +338,27 @@ app.get('/api/login-bg', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.type(bg.mime);
   res.sendFile(bg.path);
+});
+// 样式表公开只读（登录页复用主应用设计系统）
+app.get('/style.css', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'style.css'));
+});
+// 站点底部备案信息与公开人机验证站点密钥（公开只读，绝不返回 SecretKey 或任何账目数据）
+app.get('/api/site-info', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  try {
+    const s = (读数据() || {}).settings || {};
+    const tsSite = String(s.TurnstileSiteKey || '').trim();
+    const tsSecret = String(s.TurnstileSecretKey || '').trim();
+    res.json({
+      ICP备案: String(s.ICP备案 || '').trim(),
+      公安备案: String(s.公安备案 || '').trim(),
+      turnstileSiteKey: (tsSite && tsSecret) ? tsSite : ''
+    });
+  } catch (e) {
+    res.json({ ICP备案: '', 公安备案: '', turnstileSiteKey: '' });
+  }
 });
 
 // 全局鉴权拦截：除上述登录/登出/登录背景只读路由外，所有页面与 /api/* 必须先登录
@@ -497,7 +540,57 @@ function 读数据() {
     return data;
   } catch (e) { console.error('读取数据失败：', e.message); return 空数据(); }
 }
-function 写数据(data) { const 临时 = 数据文件 + '.tmp'; fs.writeFileSync(临时, JSON.stringify(data, null, 2), 'utf8'); fs.renameSync(临时, 数据文件); }
+// 每日自动滚动备份（data/备份/daily/YYYY-MM-DD_HHmm.json，保留最近 7 天）
+// 与 /api/export 同构（「租房管家完整备份」格式），需要恢复时可直接走前端「导入备份」一键还原。
+// 任何异常均只记日志不抛错，绝不影响正常记账写入。
+let 上次每日备份日期 = '';
+function 每日自动备份(当前数据, 保留天数 = 7) {
+  try {
+    const b = 北京();
+    const 今日 = `${b.getUTCFullYear()}-${补零(b.getUTCMonth() + 1)}-${补零(b.getUTCDate())}`;
+    if (上次每日备份日期 === 今日) return false;
+    fs.mkdirSync(每日备份目录, { recursive: true });
+    // 若今日已有备份文件（YYYY-MM-DD_*.json 或 YYYY-MM-DD.json），不再重复写入
+    const 已有今日 = fs.readdirSync(每日备份目录).some(f => f.startsWith(今日) && /\.json$/.test(f));
+    if (已有今日) { 上次每日备份日期 = 今日; return false; }
+    let 数据 = 当前数据;
+    if (!数据) {
+      if (!fs.existsSync(数据文件)) return false;
+      数据 = JSON.parse(fs.readFileSync(数据文件, 'utf8'));
+    }
+    let 登录凭据 = null;
+    try { if (fs.existsSync(凭据文件)) 登录凭据 = JSON.parse(fs.readFileSync(凭据文件, 'utf8')); } catch (e) {}
+    const 客人档案 = 读客人档案();
+    const 时分 = `${补零(b.getUTCHours())}${补零(b.getUTCMinutes())}`;
+    const 目标 = path.join(每日备份目录, `${今日}_${时分}.json`);
+    const 备份 = {
+      类型: '租房管家完整备份',
+      版本: '1',
+      导出时间: `${今日} ${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}:${补零(b.getUTCSeconds())}`,
+      数据, 登录凭据, 客人档案,
+    };
+    const 临时 = 目标 + '.tmp';
+    fs.writeFileSync(临时, JSON.stringify(备份, null, 2), 'utf8');
+    fs.renameSync(临时, 目标);
+    上次每日备份日期 = 今日;
+    // 只清理本机制生成的 YYYY-MM-DD(_HHmm).json，按名称正序删最老的，保留最近 N 份
+    const 列表 = fs.readdirSync(每日备份目录).filter(f => /^\d{4}-\d{2}-\d{2}(_\d{4})?\.json$/.test(f)).sort();
+    for (const f of 列表.slice(0, Math.max(0, 列表.length - 保留天数))) {
+      try { fs.unlinkSync(path.join(每日备份目录, f)); } catch (e) {}
+    }
+    return true;
+  } catch (e) {
+    console.error('每日自动备份失败（不影响主流程）：', e.message);
+    return false;
+  }
+}
+
+function 写数据(data) {
+  const 临时 = 数据文件 + '.tmp';
+  fs.writeFileSync(临时, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(临时, 数据文件);
+  每日自动备份(data);
+}
 
 // ============ 业务 ============
 function 交租日(房) { return 房.入住日 ? Number(String(房.入住日).slice(8, 10)) : null; }
@@ -763,6 +856,10 @@ app.post('/api/settings', (req, res) => {
     if (!(值 > 0)) return res.status(400).json({ 错误: '钟点房默认价必须是大于 0 的数字' });
     补丁['钟点房默认价'] = 值;
   }
+  if ('ICP备案' in 补丁) 补丁.ICP备案 = String(补丁.ICP备案 || '').trim();
+  if ('公安备案' in 补丁) 补丁.公安备案 = String(补丁.公安备案 || '').trim();
+  if ('TurnstileSiteKey' in 补丁) 补丁.TurnstileSiteKey = String(补丁.TurnstileSiteKey || '').trim();
+  if ('TurnstileSecretKey' in 补丁) 补丁.TurnstileSecretKey = String(补丁.TurnstileSecretKey || '').trim();
   Object.assign(data.settings, 补丁);
   写数据(data); res.json(data.settings);
 });
@@ -1789,7 +1886,7 @@ app.get('/api/update/check', async (req, res) => {
     // 必须带 -c core.quotepath=false：默认配置下 git 会把中文文件名转义成八进制
     // （项目备忘.md → "\351\241\271\347\233\256..."），直接显示给用户是一串乱码
     const 状态输出 = await 跑命令('git', ['-c', 'core.quotepath=false', 'status', '--porcelain']);
-    const 本地改动 = 状态输出.split('\n').filter(Boolean).map(l => l.slice(3).trim());
+    const 本地改动 = 状态输出.split('\n').filter(Boolean).map(l => l.replace(/^\s*[A-Z?!]{1,2}\s+/, '').trim());
     const 工作区干净 = 本地改动.length === 0;
 
     const 当前版本 = 读版本().版本;
@@ -1825,7 +1922,7 @@ app.post('/api/update/apply', async (req, res) => {
 
     // -c core.quotepath=false：中文文件名不转义成八进制乱码
     const 状态输出 = await 跑命令('git', ['-c', 'core.quotepath=false', 'status', '--porcelain']);
-    if (状态输出.trim()) throw new Error('检测到本地有未提交的改动，为避免误删代码已拒绝更新。请先在开发机 commit / push，或手动处理这些改动后再试。改动文件：' + 状态输出.split('\n').filter(Boolean).map(l => l.slice(3).trim()).join('、'));
+    if (状态输出.trim()) throw new Error('检测到本地有未提交的改动，为避免误删代码已拒绝更新。请先在开发机 commit / push，或手动处理这些改动后再试。改动文件：' + 状态输出.split('\n').filter(Boolean).map(l => l.replace(/^\s*[A-Z?!]{1,2}\s+/, '').trim()).join('、'));
     日志.push('✅ 工作区干净');
 
     // 本地领先远程 = 已分叉，--ff-only 一定失败，提前给个说人话的错误
@@ -2060,4 +2157,6 @@ let 重试次数 = 0;
   console.log(`  本机访问：http://localhost:${端口}`);
   console.log('数据文件：' + 数据文件);
   console.log('按 Ctrl+C 停止');
+  // 服务启动后补一份当日自动备份（若今日尚未生成）
+  每日自动备份();
 });
