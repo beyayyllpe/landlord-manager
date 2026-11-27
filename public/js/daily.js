@@ -273,17 +273,12 @@ function 打开在住详情(r) {
           : `<div class="字段"><label>续住天数</label><input id="续住天数" type="number" min="1" value="1"></div>`}
         <div class="字段"><label>${钟点 ? '金额' : '本次缴纳金额'}</label><input id="续住金额" type="number" min="0" value="${钟点 ? (Number(r.金额) || 0) : 单价}"></div>
       </div>
-      <p style="color:var(--次文字);font-size:13px;margin-top:8px">${钟点 ? '改成延时后的总时长和金额，确认后按新时长重算到点时间。' : '只填<b>本次</b>续住的天数和钱，确认后自动累加到上面的累计值。'}</p>
-      <div style="margin-top:10px;display:flex;justify-content:flex-end">
-        <div class="分段操作栏">
-          <button type="button" class="分段钮 绿" onclick="提交续住('${转义(r.房号)}')">确认续住</button>
-        </div>
-      </div>
+      <p style="color:var(--次文字);font-size:13px;margin-top:8px">${钟点 ? '改成延时后的总时长和金额，点右下角「保存」按新时长重算到点时间。' : '只填<b>本次</b>续住的天数和钱，点右下角「保存」自动累加到上面的累计值。'}</p>
     </div>
     <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <button type="button" class="文字链 危" onclick="撤销入住('${转义(r.房号)}')">撤销入住</button>
       <div class="分段操作栏" style="margin-left:auto">
-        <button type="button" class="分段钮 紫" onclick="切换续住区()">续住</button>
+        <button type="button" class="分段钮 紫" id="续住钮" onclick="切换续住区()">续住</button>
         <button type="button" class="分段钮 红" onclick="房间退房('${转义(r.房号)}')">退房</button>
         <button type="button" class="分段钮 黄" id="修改钮" onclick="切换编辑()">修改</button>
         <button type="button" class="分段钮" onclick="请求关闭模态()">关闭</button>
@@ -291,10 +286,24 @@ function 打开在住详情(r) {
       </div>
     </div>`);
 }
+function 同步在住保存钮() {
+  const 续住开 = document.getElementById('续住区')?.style.display !== 'none';
+  const 可保存 = 在住编辑中 || 续住开;
+  const 保存钮 = document.getElementById('保存钮');
+  if (保存钮) {
+    保存钮.disabled = !可保存;
+    保存钮.classList.toggle('激活', 可保存);
+  }
+}
 // 点「修改」：解锁/锁定可编辑字段（默认只读锁定，改完点「保存」才生效）
 let 在住编辑中 = false;
 window.切换编辑 = function() {
   在住编辑中 = !在住编辑中;
+  if (在住编辑中) {
+    const 续区 = document.getElementById('续住区');
+    if (续区) 续区.style.display = 'none';
+    document.getElementById('续住钮')?.classList.remove('激活');
+  }
   const 区 = document.getElementById('编辑区');
   if (区) 区.querySelectorAll('input').forEach(el => { el.disabled = !在住编辑中; });
   const 修改钮 = document.getElementById('修改钮');
@@ -302,18 +311,17 @@ window.切换编辑 = function() {
     修改钮.textContent = 在住编辑中 ? '锁定' : '修改';
     修改钮.classList.toggle('激活', 在住编辑中);
   }
-  const 保存钮 = document.getElementById('保存钮');
-  if (保存钮) {
-    保存钮.disabled = !在住编辑中;
-    保存钮.classList.toggle('激活', 在住编辑中);
-  }
+  同步在住保存钮();
 };
-// 点「续住」：展开/收起续住区（不点不显示）。展开后聚焦续住天数/时长框
+// 点「续住」：展开/收起续住区（不点不显示）。展开后直接点右下角「保存」提交续住
 window.切换续住区 = function() {
   const 区 = document.getElementById('续住区');
   if (!区) return;
   const 显示 = 区.style.display === 'none';
+  if (显示 && 在住编辑中) 切换编辑();
   区.style.display = 显示 ? '' : 'none';
+  document.getElementById('续住钮')?.classList.toggle('激活', 显示);
+  同步在住保存钮();
   if (显示) {
     const 框 = document.getElementById('续住天数') || document.getElementById('续住时长');
     框 && 框.focus();
@@ -358,8 +366,10 @@ window.办入住 = async function(房号) {
   if (r.错误) { 提示(r.错误); return; }
   提示(`${房号} 已入住`); 关闭模态(); 渲染();
 };
-// 保存：把「修改」解锁后改的客人/备注/入住天数/金额（钟点房是时长/金额）存进去，等于原来的改价
+// 保存：续住区展开时走续住提交，否则保存「修改」解锁后的编辑字段
 window.保存在住 = async function(房号) {
+  const 续住区 = document.getElementById('续住区');
+  if (续住区 && 续住区.style.display !== 'none') return window.提交续住(房号);
   const 时长框 = document.getElementById('续时长');
   const 钟点 = !!时长框;
   const 时长小时 = 钟点 ? Number(时长框.value) || 0 : 0;

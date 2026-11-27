@@ -1,5 +1,5 @@
 // ============ 总览（左侧楼层房态工作台 + 右侧总收支与备忘录） ============
-let 总览筛选 = '全部';
+let 总览筛选集 = new Set();
 let 总览待办缓存 = { 房源列表: [], 账单Map: new Map(), 日租Map: new Map(), 空置Map: new Map() };
 
 function 房号归层(房号) {
@@ -47,15 +47,7 @@ function 构建总览房源卡片数据(dAll, 账单列表, 日租态, s) {
       let 样式类 = '未抄';
       let 状态标签 = '待抄表';
       let 金额文 = '';
-      if (b.待发送) {
-        样式类 = '待发';
-        状态标签 = '待发单';
-        金额文 = b.应付租金 != null ? `¥${千分位(b.应付租金)}` : '';
-      } else if (b.状态 === '已核收') {
-        样式类 = '已核收';
-        状态标签 = b.全免 ? '已预缴' : '已核收';
-        金额文 = b.实收 > 0 ? `¥${千分位(b.实收)}` : (b.全免 ? '已预缴' : '');
-      } else if (b.状态 === '欠款') {
+      if (b.状态 === '欠款') {
         样式类 = '欠费';
         状态标签 = '欠款';
         金额文 = `¥${千分位(b.欠款)}`;
@@ -64,6 +56,14 @@ function 构建总览房源卡片数据(dAll, 账单列表, 日租态, s) {
         状态标签 = '未交';
         const 金额 = b.可计算 ? b.应付租金 : b.结转;
         金额文 = `¥${千分位(金额)}`;
+      } else if (b.待发送) {
+        样式类 = '待发';
+        状态标签 = '待发单';
+        金额文 = b.应付租金 != null ? `¥${千分位(b.应付租金)}` : '';
+      } else if (b.状态 === '已核收') {
+        样式类 = '已核收';
+        状态标签 = b.全免 ? '已预缴' : '已核收';
+        金额文 = b.实收 > 0 ? `¥${千分位(b.实收)}` : (b.全免 ? '已预缴' : '');
       }
       卡片列表.push({ 房号, 分类: '月租', 状态标签, 样式类, 金额文, 左侧文, 房, 账单: b });
     } else {
@@ -106,65 +106,166 @@ function 过滤工作台卡片(列表, 筛选) {
   return 列表;
 }
 
+function 楼层短标(层) {
+  if (层 === '阁楼' || 层 === '其他') return 层;
+  const n = parseInt(层);
+  return isNaN(n) ? 层 : `${n}F`;
+}
+
+function 取房卡金额数(c) {
+  if (!c) return 0;
+  if (c.样式类 === '欠费') return Number(c.账单?.欠款) || 0;
+  if (c.样式类 === '未交') return Number(c.账单?.可计算 ? c.账单?.应付租金 : c.账单?.结转) || 0;
+  if (c.样式类 === '待发') return Number(c.账单?.应付租金) || 0;
+  return 0;
+}
+
+function 取房卡日期数(c) {
+  const 日串 = c?.房?.入住日 || c?.账单?.交租日期 || '';
+  const d = Number(String(日串).split('-')[2]);
+  return Number.isFinite(d) && d > 0 ? d : 99;
+}
+
+function 按日期排房卡(a, b) {
+  return 取房卡日期数(a) - 取房卡日期数(b) || String(a.房号).localeCompare(String(b.房号), 'zh-CN', { numeric: true });
+}
+
 function 渲染楼层工作台HTML(卡片列表) {
-  const 过滤后 = 过滤工作台卡片(卡片列表, 总览筛选);
+  const 欠款们 = 卡片列表.filter(x => x.样式类 === '欠费').sort(按日期排房卡);
+  const 未交们 = 卡片列表.filter(x => x.样式类 === '未交').sort(按日期排房卡);
+  const 待发们 = 卡片列表.filter(x => x.样式类 === '待发').sort(按日期排房卡);
+  const 空净们 = 卡片列表.filter(x => x.样式类 === '空置净');
+  const 脏房们 = 卡片列表.filter(x => x.样式类 === '空置脏' || x.样式类 === '日租脏房');
+  const 欠款总额 = 欠款们.reduce((s, c) => s + 取房卡金额数(c), 0);
+  const 未交总额 = 未交们.reduce((s, c) => s + 取房卡金额数(c), 0);
+
   const 组 = {};
-  for (const c of 过滤后) {
+  for (const c of 卡片列表) {
     const 层 = 房号归层(c.房号);
     (组[层] = 组[层] || []).push(c);
   }
-  const 排序层 = Object.entries(组).sort((a, b) => 房号层序(a[0]) - 房号层序(b[0]));
-  const 统计 = {
-    全部: 卡片列表.length,
-    欠费: 卡片列表.filter(x => x.样式类 === '欠费' || x.样式类 === '未交').length,
-    待发: 卡片列表.filter(x => x.样式类 === '待发').length,
-    已核收: 卡片列表.filter(x => x.样式类 === '已核收').length,
-    空置: 卡片列表.filter(x => x.分类 === '空置').length,
-    脏房: 卡片列表.filter(x => x.样式类 === '空置脏' || x.样式类 === '日租脏房').length,
-    日租: 卡片列表.filter(x => x.分类 === '日租').length
+  // 阁楼置顶，其余按 2F -> 10F 升序排列
+  const 全景层序 = 层 => 层 === '阁楼' ? 0 : 房号层序(层);
+  const 排序层 = Object.entries(组).sort((a, b) => 全景层序(a[0]) - 全景层序(b[0]));
+
+  const 命中筛选 = c => {
+    if (总览筛选集.size === 0) return true;
+    if (总览筛选集.has('欠款') && c.样式类 === '欠费') return true;
+    if (总览筛选集.has('未交') && c.样式类 === '未交') return true;
+    if (总览筛选集.has('空房') && c.样式类 === '空置净') return true;
+    if (总览筛选集.has('脏房') && (c.样式类 === '空置脏' || c.样式类 === '日租脏房')) return true;
+    return false;
   };
-  const 筛选项 = [
-    ['全部', '全部', 统计.全部, ''],
-    ['欠费', '欠款', 统计.欠费, '点红'],
-    ['待发', '待发', 统计.待发, '点蓝'],
-    ['已核收', '已收', 统计.已核收, '点绿'],
-    ['空置', '空房', 统计.空置, '点灰'],
-    ['脏房', '脏房', 统计.脏房, '点琥珀'],
-    ['日租', '日租', 统计.日租, '点紫']
-  ];
+
+  const 简左 = c => {
+    const 房 = c.房;
+    const 日 = 房 && 房.入住日 ? `${Number(String(房.入住日).split('-')[2])}号` : '';
+    const 名 = (房 && 房.租客姓名) ? String(房.租客姓名).trim() : '';
+    return [日, 名].filter(Boolean).join(' · ') || '—';
+  };
+
+  const 渲染发送状态 = c => {
+    const b = c.账单;
+    if (!b || !b.可计算) return '<span class="待办未抄">未抄表</span>';
+    const 房 = 转义(c.房号);
+    const 日 = 转义(b.交租日期 || '');
+    if (b.待发送) {
+      return `<button type="button" class="待办钮 待发送钮" onclick="event.stopPropagation();发送跳转('${房}','${日}')">发送</button>`;
+    }
+    return `<button type="button" class="待办钮 已发送钮" onclick="event.stopPropagation();发送跳转('${房}','${日}')" title="点击查看租客账单">已发送 ✓</button>`;
+  };
+
+  const 渲染待处理组 = (标题, 点色类, 列表, 总额) => {
+    if (!列表.length) return '';
+    return `
+      <div class="待办组">
+        <div class="待办组头">
+          <span class="待办组名"><i class="${点色类}"></i>${标题}</span>
+          <span class="待办组数">${列表.length} 间${总额 > 0 ? ` · ¥${千分位(总额)}` : ''}</span>
+        </div>
+        ${列表.map(c => {
+          const 额 = 取房卡金额数(c);
+          return `<div class="待办行" onclick="点工作台房间('${转义(c.房号)}')" onmouseenter="高亮全景房('${转义(c.房号)}')" onmouseleave="高亮全景房('')">
+            <b class="待办房">${转义(c.房号)}</b>
+            <span class="待办副">${转义(简左(c))}</span>
+            <span class="待办钱 ${点色类 === '红' ? '红' : ''}">${额 > 0 ? '¥' + 千分位(额) : ''}</span>
+            ${渲染发送状态(c)}
+          </div>`;
+        }).join('')}
+      </div>`;
+  };
+
+  const 待处理内容 =
+    渲染待处理组('欠款', '红', 欠款们, 欠款总额) +
+    渲染待处理组('未交', '浅红', 未交们, 未交总额) +
+    渲染待处理组('待发单', '蓝', 待发们, 0);
+
   return `
-    <div class="工作台外框">
-      <div class="工作台头">
-        <h2 style="margin:0;font-size:16px">房态工作台</h2>
-        <div class="筛选栏">
-          ${筛选项.map(([k, 文, 数, 点类]) => `<button type="button" class="筛选丸${总览筛选 === k ? ' 激活' : ''}${数 === 0 ? ' 零数' : ''}" onclick="切换总览筛选('${k}')">${点类 ? `<i class="图例点 ${点类}"></i>` : ''}${文} <span>${数}</span></button>`).join('')}
+    <div class="总览指标四格">
+      <button type="button" class="指标小卡${总览筛选集.has('欠款') ? ' 选中' : ''}" onclick="切换总览筛选('欠款')">
+        <div class="指标主"><b class="红"><span class="币">¥</span>${千分位(欠款总额)}</b><span>${欠款们.length} 间</span></div>
+        <div class="指标标"><i class="红"></i>欠款</div>
+      </button>
+      <button type="button" class="指标小卡${总览筛选集.has('未交') ? ' 选中' : ''}" onclick="切换总览筛选('未交')">
+        <div class="指标主"><b><span class="币">¥</span>${千分位(未交总额)}</b><span>${未交们.length} 间</span></div>
+        <div class="指标标"><i class="浅红"></i>未交</div>
+      </button>
+      <button type="button" class="指标小卡${总览筛选集.has('空房') ? ' 选中' : ''}" onclick="切换总览筛选('空房')">
+        <div class="指标主"><b>${空净们.length}</b><span>间</span></div>
+        <div class="指标标"><i class="灰"></i>空房</div>
+      </button>
+      <button type="button" class="指标小卡${总览筛选集.has('脏房') ? ' 选中' : ''}" onclick="切换总览筛选('脏房')">
+        <div class="指标主"><b>${脏房们.length}</b><span>间</span></div>
+        <div class="指标标"><i class="黄"></i>待保洁</div>
+      </button>
+    </div>
+
+    <div class="总览全景双栏">
+      <div class="卡片 全景卡">
+        <div class="全景卡头">
+          <h3>楼层全景</h3>
+          ${总览筛选集.size === 0 ? '' : `<span><button type="button" class="淡操作链" onclick="切换总览筛选('全部')">清除筛选</button></span>`}
+        </div>
+        <div class="全景楼层表">
+          ${排序层.map(([层, 房们]) => `
+            <div class="全景楼层行">
+              <span class="全景层标">${转义(楼层短标(层))}</span>
+              <div class="全景房格行">
+                ${房们.map(c => {
+                  const 淡化 = !命中筛选(c);
+                  return `<button type="button" class="全景房格 ${c.样式类}${淡化 ? ' 淡化' : ''}" data-room="${转义(c.房号)}" onclick="点工作台房间('${转义(c.房号)}')" title="${转义(c.房号)} · ${转义(c.状态标签 || '空闲')}${c.金额文 ? ' ' + c.金额文 : ''}">${转义(c.房号)}</button>`;
+                }).join('')}
+              </div>
+            </div>`).join('')}
         </div>
       </div>
-      ${排序层.length ? 排序层.map(([层, 房们]) => {
-        const 是日租层 = 房们.length > 0 && 房们.every(c => c.分类 === '日租');
-        return `
-        <div class="工作台楼层${是日租层 ? ' 日租楼层底板' : ''}">
-          <div class="楼层标${是日租层 ? ' 日租楼层' : ''}">${转义(层)}<span>${房们.length}间</span></div>
-          <div class="房卡网格">
-            ${房们.map(c => `
-              <button type="button" class="房卡 ${c.样式类}" onclick="点工作台房间('${转义(c.房号)}')">
-                <div class="房卡顶">
-                  <b>${转义(c.房号)}</b>
-                  ${c.金额文 ? `<span class="房卡钱">${转义(c.金额文)}</span>` : ''}
-                </div>
-                <div class="房卡底">
-                  <span class="房卡左">${转义(c.左侧文 || '')}</span>
-                  ${c.样式类 === '已核收' ? '' : `<span class="状态点标 ${c.样式类}"><i></i>${转义(c.状态标签)}</span>`}
-                </div>
-              </button>`).join('')}
-          </div>
-        </div>`;
-      }).join('') : '<div class="空">该筛选条件下暂无房间</div>'}
+
+      <div class="卡片 待处理卡">
+        <div class="全景卡头">
+          <h3>待处理</h3>
+        </div>
+        <div class="待处理表">
+          ${待处理内容 || '<div class="空" style="padding:36px 0">本月账单已全部处理完毕</div>'}
+        </div>
+      </div>
     </div>`;
 }
 
+window.高亮全景房 = function(房号) {
+  document.querySelectorAll('.全景房格.联动高亮').forEach(el => el.classList.remove('联动高亮'));
+  if (!房号) return;
+  const 目标 = document.querySelector(`.全景房格[data-room="${CSS.escape(房号)}"]`);
+  if (目标) 目标.classList.add('联动高亮');
+};
+
 window.切换总览筛选 = function(筛选) {
-  总览筛选 = 筛选;
+  if (筛选 === '全部') {
+    总览筛选集.clear();
+  } else if (总览筛选集.has(筛选)) {
+    总览筛选集.delete(筛选);
+  } else {
+    总览筛选集.add(筛选);
+  }
   const 区 = document.getElementById('总览工作台容器');
   if (区) 区.innerHTML = 渲染楼层工作台HTML(总览待办缓存.房源列表);
 };
@@ -328,15 +429,6 @@ async function 渲染总览(容器) {
   if (日租态) 房态数据 = 日租态;
 
   const 卡片列表 = 构建总览房源卡片数据(全局, 账单列表, 日租态, s);
-  const 待发送们 = (s.欠费 || []).filter(b => b.待发送);
-
-  const 待发送条 = 待发送们.length ? 折叠卡片('待发送', `<h3 style="margin:0;font-size:var(--fs-base)">待发送账单（${待发送们.length} 间）</h3>`, `
-    <div class="待发送列表" style="margin-top:10px">${待发送们.map(b => `
-      <div class="待发送行">
-        <div class="待发送主"><b>${转义(b.房号)}</b><span class="待发送租客">${转义(b.租客 || '')}</span></div>
-        <div class="待发送日">${中文日期(b.交租日期)}</div>
-        <button class="btn 行内 成功" onclick="发送跳转('${转义(b.房号)}','${转义(b.交租日期 || '')}')">发送</button>
-      </div>`).join('')}</div>`, true) : '';
 
   const 不齐条 = s.数据不齐.length ? 折叠卡片('数据不齐', `<h3 style="margin:0;font-size:var(--fs-base);color:var(--红)">数据不齐（${s.数据不齐.length} 间）</h3>`, `
     <div class="表格容器" style="margin-top:10px"><table><tr><th>房号</th><th>缺失项</th></tr>${s.数据不齐.map(x => `<tr><td><b>${转义(x.房号)}</b></td><td style="color:var(--红)">缺：${x.缺失.join('、')}</td></tr>`).join('')}</table></div>`, true) : '';
@@ -350,7 +442,6 @@ async function 渲染总览(容器) {
     <div class="总览双栏">
       <div class="总览左栏">
         ${不齐条}
-        ${待发送条}
         <div id="总览工作台容器">${渲染楼层工作台HTML(卡片列表)}</div>
       </div>
       <div class="总览右栏">
