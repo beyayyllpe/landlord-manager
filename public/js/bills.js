@@ -120,14 +120,226 @@ async function 加载租客账单列表() {
       ${b.状态==='欠款' ? `<div class="账单底度" style="color:var(--红)">欠 ¥${数字(b.欠款)}</div>` : ''}
       ${b.房间备注 ? `<div class="账单备注">房间备注：${转义(b.房间备注)}</div>` : ''}
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<button class="btn 成功" onclick="标记已发送('${转义(b.房号)}','${b.月份}')">发送账单</button>` : ''}
+        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<button class="btn 成功" onclick="标记已发送('${转义(b.房号)}','${b.月份}',${idx})">发送账单</button>` : ''}
+        ${b.可计算 ? `<button class="btn 次 小" onclick="复制账单图片(${idx})">复制图片</button>` : ''}
         ${b.可计算 ? `<button class="btn 次 小" onclick="复制租客账单(${idx})">复制文本</button>` : ''}
-        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<span style="font-size:var(--fs-xs);color:var(--次文字)">发给租客后点「发送账单」定格</span>` : ''}
+        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<span style="font-size:var(--fs-xs);color:var(--次文字)">点「发送账单」定格并自动复制账单图片</span>` : ''}
         ${b.可计算 && b.已发送 ? `<span style="font-size:var(--fs-sm);color:var(--绿)">已发送给租客（账单已定格）</span>${!月份锁定(b.月份) ? `<button class="btn 次 小" onclick="撤销发送('${转义(b.房号)}','${b.月份}')">撤销发送</button>` : ''}` : ''}
       </div>
     </div>`;
   }).join('');
 }
+function 画圆角矩形(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function 生成账单图片Blob(原始) {
+  const 锁定发送 = 原始.已发送 && 原始.发送快照;
+  const b = 锁定发送 ? { ...原始.发送快照, 欠款: 原始.欠款, 转下月: 原始.转下月, 状态: 原始.状态, 可计算: 原始.可计算, 当月新租: 原始.当月新租, 房间备注: 原始.房间备注 } : 原始;
+  const 未抄 = b.状态 === '未交' && !b.可计算;
+  const 免算 = b.当月新租 && b.本月水底 == null;
+  const 水电可用 = !未抄 && !免算;
+  const 结转 = Number(b.结转) || 0;
+  const 补缴 = Number(b.补缴) || 0;
+  const 已追缴结转 = Math.min(结转, 补缴);
+  const 结转剩余 = 结转 - 已追缴结转;
+  const 应付文 = 未抄 ? '—' : ('¥' + 数字((Number(b.应付租金) || 0) - 已追缴结转));
+  const 有其它 = Number(b.房间损耗) > 0 || !!(b.损耗说明 && String(b.损耗说明).trim());
+
+  const W = 980;
+  const padX = 32;
+  const rowH = 54;
+  const 行数 = 有其它 ? 3 : 2;
+  const headerH = 68;
+  const summaryH = 64;
+  const H = headerH + 行数 * rowH + 22 + summaryH + 28;
+  const dpr = 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const fontSans = '"PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif';
+  // 外层白底圆角卡
+  ctx.fillStyle = '#FFFFFF';
+  画圆角矩形(ctx, 0.5, 0.5, W - 1, H - 1, 14);
+  ctx.fill();
+  ctx.strokeStyle = '#E6E3DC';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 顶部标题栏
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#1F2329';
+  ctx.font = `700 24px ${fontSans}`;
+  const 房号文 = `房号：${b.房号}`;
+  ctx.fillText(房号文, padX, 38);
+  const 房号宽 = ctx.measureText(房号文).width;
+
+  ctx.fillStyle = '#6F6B63';
+  ctx.font = `400 14px ${fontSans}`;
+  ctx.fillText('（房租缴纳单）', padX + 房号宽 + 6, 40);
+
+  ctx.textAlign = 'right';
+  ctx.fillText(中文日期(b.交租日期) || b.月份 || '', W - padX, 39);
+  ctx.textAlign = 'left';
+
+  // 明细行绘制
+  const 画明细行 = (y, 名称, 单价, 底度, 用量, 金额) => {
+    const cy = y + rowH / 2;
+    ctx.strokeStyle = '#EEECE6';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, y + rowH);
+    ctx.lineTo(W - padX, y + rowH);
+    ctx.stroke();
+
+    ctx.fillStyle = '#1F2329';
+    ctx.font = `600 16px ${fontSans}`;
+    ctx.fillText(名称, padX, cy);
+    if (单价) {
+      const 名宽 = ctx.measureText(名称).width;
+      ctx.fillStyle = '#6F6B63';
+      ctx.font = `400 13px ${fontSans}`;
+      ctx.fillText(单价, padX + 名宽 + 8, cy + 1);
+    }
+
+    ctx.fillStyle = '#55524C';
+    ctx.font = `400 15px ${fontSans}`;
+    ctx.fillText(底度, padX + 145, cy);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#1F2329';
+    ctx.font = `600 15px ${fontSans}`;
+    if (用量) ctx.fillText(用量, W - padX - 110, cy);
+    ctx.font = `700 16px ${fontSans}`;
+    ctx.fillText(金额, W - padX, cy);
+    ctx.textAlign = 'left';
+  };
+
+  let curY = headerH;
+  画明细行(
+    curY,
+    '水费',
+    `${精金额(b.水费单价)}元/方`,
+    水电可用 ? `${b.上月水底 ?? '—'} → ${b.本月水底 ?? '—'}` : (免算 ? '当月新租免算' : '未抄表'),
+    水电可用 ? `${精金额(b.用水量)} 方` : '',
+    水电可用 ? `¥${精金额(b.水费)}` : '—'
+  );
+  curY += rowH;
+
+  画明细行(
+    curY,
+    '电费',
+    `${精金额(b.电费单价)}元/度`,
+    水电可用 ? `${b.上月电底 ?? '—'} → ${b.本月电底 ?? '—'}` : (免算 ? '当月新租免算' : '未抄表'),
+    水电可用 ? `${精金额(b.用电量)} 度` : '',
+    水电可用 ? `¥${精金额(b.电费)}` : '—'
+  );
+  curY += rowH;
+
+  if (有其它) {
+    画明细行(
+      curY,
+      '其它',
+      '',
+      String(b.损耗说明 || '其它费用').trim(),
+      '',
+      `¥${数字(b.房间损耗)}`
+    );
+    curY += rowH;
+  }
+
+  // 底部浅灰汇总条
+  const sumY = curY + 18;
+  ctx.fillStyle = '#F2F1EC';
+  画圆角矩形(ctx, padX, sumY, W - padX * 2, summaryH, 10);
+  ctx.fill();
+
+  const sumCy = sumY + summaryH / 2;
+  let tx = padX + 18;
+  const 画汇总项 = (标签, 值) => {
+    ctx.fillStyle = '#6F6B63';
+    ctx.font = `400 14px ${fontSans}`;
+    ctx.fillText(标签 + ' ', tx, sumCy);
+    tx += ctx.measureText(标签 + ' ').width;
+    ctx.fillStyle = '#1F2329';
+    ctx.font = `600 14px ${fontSans}`;
+    ctx.fillText(值, tx, sumCy);
+    tx += ctx.measureText(值).width + 18;
+  };
+  画汇总项('租金', b.房租已预缴 ? '已预缴' : '¥' + 数字(b.房租));
+  画汇总项('管理费', b.管理费已预缴 ? '已预缴' : '¥' + 数字(b.管理费));
+  画汇总项('水费', 水电可用 ? '¥' + 数字(b.水费) : '—');
+  画汇总项('电费', 水电可用 ? '¥' + 数字(b.电费) : '—');
+  画汇总项('其它', '¥' + 数字(b.房间损耗));
+  if (结转) {
+    画汇总项('上月结转', '¥' + 数字(结转));
+    if (已追缴结转 >= 结转) {
+      tx -= 12;
+      ctx.fillStyle = '#2F6845';
+      ctx.font = `600 13px ${fontSans}`;
+      ctx.fillText('已追缴', tx, sumCy);
+    } else if (已追缴结转 > 0) {
+      tx -= 12;
+      ctx.fillStyle = '#2F6845';
+      ctx.font = `600 13px ${fontSans}`;
+      ctx.fillText(`已追缴 ¥${数字(已追缴结转)}，尚欠 ¥${数字(结转剩余)}`, tx, sumCy);
+    }
+  }
+
+  // 右侧合计应付
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#1F2329';
+  ctx.font = `700 25px ${fontSans}`;
+  ctx.fillText(应付文, W - padX - 18, sumCy);
+  const 应付宽 = ctx.measureText(应付文).width;
+  ctx.fillStyle = '#6F6B63';
+  ctx.font = `400 14px ${fontSans}`;
+  ctx.fillText('应付：', W - padX - 18 - 应付宽 - 4, sumCy + 2);
+  ctx.textAlign = 'left';
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片生成失败')), 'image/png');
+  });
+}
+
+window.复制账单图片 = async function(idx, 选项 = {}) {
+  const 原始 = (window._当前账单列表 || [])[idx];
+  if (!原始) return false;
+  try {
+    const blob = await 生成账单图片Blob(原始);
+    if (navigator.clipboard && window.ClipboardItem && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      if (!选项.静默成功) 提示(`已复制 ${原始.房号} 账单图片，可直接粘贴发送`);
+      return true;
+    }
+    if (!选项.不下载) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `房租账单_${原始.房号}_${原始.月份}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      提示(`当前环境不支持直接写图片到剪贴板，已保存 ${原始.房号} 账单图片`);
+    }
+    return false;
+  } catch (e) {
+    if (!选项.不下载) 提示('复制图片失败（请确认在 HTTPS 或本地环境打开）');
+    return false;
+  }
+};
+
 window.复制租客账单 = async function(idx) {
   const 原始 = (window._当前账单列表 || [])[idx];
   if (!原始) return;

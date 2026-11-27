@@ -584,12 +584,17 @@ window.发送跳转 = function(房号, 交租日期) {
   document.querySelectorAll('.导航 button').forEach(b => b.classList.toggle('激活', b.dataset.page === '账单'));
   渲染();
 };
-// 标记账单已发送给租客（租客账单页账单卡下方的「发送账单」按钮）
-window.标记已发送 = async function(房号, 月份) {
+// 标记账单已发送给租客（租客账单页账单卡下方的「发送账单」按钮，同步自动复制账单图片到剪贴板）
+window.标记已发送 = async function(房号, 月份, idx) {
   if (!(await 询问确认('确认发送账单？', `${转义(房号)}　${月份} 账单标记为已发送给租客`))) return;
   const r = await api('/api/bills/sent', { method: 'POST', body: { 房号, 月份 } });
   if (r.错误) { 提示(r.错误); return; }
-  提示('已标记发送'); 渲染();
+  let 已复制图 = false;
+  if (idx != null && typeof 复制账单图片 === 'function') {
+    已复制图 = await 复制账单图片(idx, { 静默成功: true, 不下载: true });
+  }
+  提示(已复制图 ? `已标记发送，${房号} 账单图片已复制到剪贴板` : '已标记发送（可点「复制图片」粘贴给租客）');
+  渲染();
 };
 // 撤销发送：回到待发送（账单内容恢复实时计算），改错后重新发送再定格
 window.撤销发送 = async function(房号, 月份) {
