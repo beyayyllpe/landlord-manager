@@ -2809,6 +2809,13 @@ body.still *, body.still *::before, body.still *::after {
   gap: 12px;
   width: 100%;
 }
+.外设磁贴列.双格 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 460px;
+}
+.外设磁贴列.单格 {
+  grid-template-columns: minmax(0, 230px);
+}
 .外设磁贴 {
   display: flex;
   flex-direction: column;

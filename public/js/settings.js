@@ -625,12 +625,11 @@ async function 设置_主题() {
         <div class="外设卡">
           <div class="外设卡头"><h3>登录页背景</h3><small>支持图片 / GIF / 短视频 (≤20MB)</small></div>
           <div class="外设行 顶对齐">
-            <div class="外设标签">背景图与标题<small>电脑 / 手机独立配置</small></div>
+            <div class="外设标签">背景图片<small>电脑 / 手机独立配置</small></div>
             <div class="外设控件">
-              <div class="外设磁贴列">
+              <div class="外设磁贴列 双格">
                 ${外设磁贴HTML('16:9 电脑端', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
                 ${外设磁贴HTML('9:16 手机端', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
-                ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
               </div>
             </div>
           </div>
@@ -648,15 +647,6 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">表单模糊</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="0" max="16" value="${c.blur}" oninput="外设滑('blur',this.value)">
-                <span class="外设滑块值" id="外设值_blur">${c.blur}px</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
             <div class="外设标签">自动对比度<small>依据背景明暗微调</small></div>
             <div class="外设控件">
               <label class="外设开关"><input type="checkbox" ${c.autoContrast ? 'checked' : ''} onchange="外设开('autoContrast',this.checked)"><span class="外设开关轨"></span></label>
@@ -665,7 +655,15 @@ async function 设置_主题() {
         </div>
 
         <div class="外设卡">
-          <div class="外设卡头"><h3>标题与表单</h3><small>微调登录页排版位置与风格</small></div>
+          <div class="外设卡头"><h3>标题与表单</h3><small>登录页标题、输入框与页脚排版</small></div>
+          <div class="外设行 顶对齐">
+            <div class="外设标签">标题图 Logo<small>推荐透明背景 PNG</small></div>
+            <div class="外设控件">
+              <div class="外设磁贴列 单格">
+                ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
+              </div>
+            </div>
+          </div>
           <div class="外设行">
             <div class="外设标签">标题大小</div>
             <div class="外设控件">
@@ -685,6 +683,19 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
+            <div class="外设标签">英文副标题</div>
+            <div class="外设控件" style="flex-wrap:nowrap">
+              <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
+              <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">英文小标语</div>
+            <div class="外设控件">
+              <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
+            </div>
+          </div>
+          <div class="外设行">
             <div class="外设标签">表单位置</div>
             <div class="外设控件">
               <div class="外设滑块组">
@@ -698,21 +709,17 @@ async function 设置_主题() {
             <div class="外设控件">${外设分段HTML('formStyle', [['glass','透明玻璃'],['solid','实色卡片'],['outline','极简描边']], c.formStyle)}</div>
           </div>
           <div class="外设行">
+            <div class="外设标签">表单模糊</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="0" max="16" value="${c.blur}" oninput="外设滑('blur',this.value)">
+                <span class="外设滑块值" id="外设值_blur">${c.blur}px</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
             <div class="外设标签">文字颜色</div>
             <div class="外设控件">${外设分段HTML('textTone', [['auto','自动'],['light','浅色'],['dark','深色']], c.textTone)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">英文副标题</div>
-            <div class="外设控件" style="flex-wrap:nowrap">
-              <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
-              <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">英文小标语</div>
-            <div class="外设控件">
-              <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
-            </div>
           </div>
           <div class="外设行">
             <div class="外设标签">底部备案信息</div>
