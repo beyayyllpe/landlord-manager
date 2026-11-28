@@ -2747,6 +2747,7 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设滑块 { display: flex; align-items: center; gap: 10px; width: 100%; }
 .外设滑块 input[type="range"] { flex: 1; accent-color: var(--ink); cursor: pointer; }
 .外设开关 input:checked + .外设开关轨 { background: var(--ink); border-color: var(--ink); }
+[data-theme="dark"] .外设开关 input:checked + .外设开关轨::after { background: var(--filter-active-text, #141414); }
 .外设预览操作 { display: flex; align-items: center; gap: 6px; }
 .外设文卡 {
   margin-top: 10px;
