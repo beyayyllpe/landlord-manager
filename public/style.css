@@ -3031,11 +3031,12 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设预览双线 {
   display: flex; align-items: center; justify-content: center; gap: 14px;
   width: 310px; margin-top: 12px;
+  font-size: 13px; letter-spacing: .42em;
 }
 .外设预览舞台.电脑 .外设预览双线 { width: 340px; }
 .外设预览双线 i { flex: 1; height: 1px; background: currentColor; opacity: .45; }
 .外设预览双线 em {
-  font-style: normal; font-size: 13px; letter-spacing: .42em;
+  font-style: normal; font-size: inherit; letter-spacing: inherit;
   padding-left: .42em;
   text-transform: uppercase; opacity: .9; white-space: nowrap;
 }

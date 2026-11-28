@@ -327,15 +327,20 @@ function 应用预览自定义CSS(cssText) {
     styleEl.id = '外设预览自定义CSS';
     document.head.appendChild(styleEl);
   }
-  const raw = String(cssText || '').trim();
-  if (!raw) { styleEl.textContent = ''; return; }
-  styleEl.textContent = raw.replace(/([^{}]+)\{/g, (_, sel) => {
+  const clean = String(cssText || '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  if (!clean) { styleEl.textContent = ''; return; }
+  styleEl.textContent = clean.replace(/([^{}]+)\{([^}]*)\}/g, (_, sel, body) => {
     const scoped = sel.split(',').map(s => {
-      const t = s.trim();
+      const t = s.trim().replace(/^body(\.有背景)?\s*/i, '');
       if (!t || t.startsWith('@')) return t;
       return `#外设预览舞台 ${t}, #外设预览舞台_大 ${t}`;
-    }).join(', ');
-    return `${scoped} {`;
+    }).filter(Boolean).join(', ');
+    const impBody = body.replace(/([^;{}\s][^;{}]*?)(!important)?\s*(;|$)/g, (m, prop, imp, end) => {
+      const p = prop.trim();
+      if (!p || p.includes('{')) return m;
+      return `${p} !important${end || ';'}`;
+    });
+    return `${scoped} { ${impBody} }`;
   });
 }
 
@@ -416,12 +421,15 @@ function 渲染预览舞台到(后缀) {
   const subBox = document.getElementById('外设预览双线' + 后缀);
   const subTxt = document.getElementById('外设预览双线字' + 后缀);
   const subDesc = document.getElementById('外设预览标语' + 后缀);
-  if (subBox) subBox.style.display = c.showSub ? 'flex' : 'none';
+  if (subBox) {
+    subBox.style.display = c.showSub ? 'flex' : 'none';
+    subBox.style.fontSize = `${Number(c.subSize) || 13}px`;
+    const tr = ((Number(c.subTracking) || 42) / 100).toFixed(2) + 'em';
+    subBox.style.letterSpacing = tr;
+  }
   if (subTxt) {
     subTxt.textContent = String(c.subtitle ?? 'Rental Keeper').trim();
-    subTxt.style.fontSize = `${Number(c.subSize) || 13}px`;
     const tr = ((Number(c.subTracking) || 42) / 100).toFixed(2) + 'em';
-    subTxt.style.letterSpacing = tr;
     subTxt.style.paddingLeft = tr;
   }
   if (subDesc) {

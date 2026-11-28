@@ -631,12 +631,16 @@
               if (!wg.subDesc.trim()) sub2.style.display = 'none';
             }
           }
-          if (wg.subSize && sub1) sub1.style.fontSize = wg.subSize + 'px';
-          if (wg.subTracking && sub1) {
-            const tr = (Number(wg.subTracking) / 100).toFixed(2) + 'em';
-            sub1.style.letterSpacing = tr;
-            const sp = sub1.querySelector('span');
-            if (sp) sp.style.paddingLeft = tr;
+          const cssRules = [];
+          if (wg.subSize || wg.subTracking) {
+            const tr = wg.subTracking ? (Number(wg.subTracking) / 100).toFixed(2) + 'em' : '';
+            cssRules.push(`
+              body.有背景 .双线英 {
+                ${wg.subSize ? `font-size: ${wg.subSize}px;` : ''}
+                ${tr ? `letter-spacing: ${tr};` : ''}
+              }
+              ${tr ? `body.有背景 .双线英 span { padding-left: ${tr}; }` : ''}
+            `);
           }
           if (wg.textColor || wg.textWeight || wg.textStroke || wg.textShadow !== undefined) {
             const tc = wg.textColor || '#ffffff';
@@ -646,8 +650,7 @@
             const tsh = wg.textShadow !== undefined ? Number(wg.textShadow) : 8;
             const shCss = tsh > 0 ? `0 2px ${tsh}px rgba(0,0,0,0.65)` : 'none';
             const stCss = ts > 0 ? `${ts}px ${tsc}` : '0';
-            const st = document.createElement('style');
-            st.textContent = `
+            cssRules.push(`
               body.有背景 .双线头部, body.有背景 .双线英, body.有背景 .双线副, body.有背景 .备案底栏 {
                 color: ${tc}; font-weight: ${tw}; text-shadow: ${shCss}; -webkit-text-stroke: ${stCss};
               }
@@ -655,7 +658,12 @@
                 color: ${tc}; font-weight: ${tw}; text-shadow: ${shCss};
               }
               body.有背景 .输入盒 input::placeholder { color: ${tc}; opacity: .72; }
-            `;
+            `);
+          }
+          if (cssRules.length) {
+            const st = document.createElement('style');
+            st.id = '外观基础CSS';
+            st.textContent = cssRules.join('\n');
             document.head.appendChild(st);
           }
           if (wg.customCss && String(wg.customCss).trim()) {
