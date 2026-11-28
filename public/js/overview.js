@@ -542,11 +542,11 @@ async function 渲染总览(容器) {
   const 距今 = 上次备份 ? 距今天数(上次备份) : 999;
   const 暂隐 = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('备份提醒暂隐') === '1';
   const 备份提醒条 = (!暂隐 && 距今 >= 7) ? `
-    <div id="备份提醒条" class="卡片" style="margin-bottom:12px;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#F5F1E8;color:#1F2329;border-color:#DFDAD0">
-      <span style="font-size:13px;color:#1F2329">${上次备份 ? `已 ${距今} 天未手动下载完整备份（上次：${转义(上次备份)}），建议定期异地保存` : '尚未手动下载过完整备份，建议下载一份存到本机或网盘以防设备故障'}</span>
+    <div id="备份提醒条" class="卡片 备份提醒条">
+      <span class="备份提醒字">${上次备份 ? `已 ${距今} 天未手动下载完整备份（上次：${转义(上次备份)}），建议定期异地保存` : '尚未手动下载过完整备份，建议下载一份存到本机或网盘以防设备故障'}</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <a class="btn 行内" href="/api/export" download onclick="触发手动备份下载()" style="background:#FFFFFF;color:#1F2329;border-color:#CFC8BA;font-weight:600;text-decoration:none">一键下载完整备份</a>
-        <button type="button" class="btn 行内 次" onclick="稍后备份提醒()" style="background:transparent;color:#1F2329;border-color:#D6D0C4">稍后提醒</button>
+        <a class="btn 行内 备份主钮" href="/api/export" download onclick="触发手动备份下载()">一键下载完整备份</a>
+        <button type="button" class="btn 行内 次 备份次钮" onclick="稍后备份提醒()">稍后提醒</button>
       </div>
     </div>` : '';
 

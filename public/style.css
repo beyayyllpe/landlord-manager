@@ -2636,6 +2636,30 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   --app-radius: 12px;
 }
 
+.备份提醒条 {
+  margin-bottom: 12px;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #F5F1E8;
+  color: #1F2329;
+  border-color: #DFDAD0;
+}
+.备份提醒条 .备份提醒字 { font-size: 13px; color: #1F2329; }
+.备份提醒条 .备份主钮 { background: #FFFFFF; color: #1F2329; border-color: #CFC8BA; font-weight: 600; text-decoration: none; }
+.备份提醒条 .备份次钮 { background: transparent; color: #1F2329; border-color: #D6D0C4; }
+[data-theme="dark"] .备份提醒条 {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border);
+}
+[data-theme="dark"] .备份提醒条 .备份提醒字 { color: var(--ink); }
+[data-theme="dark"] .备份提醒条 .备份主钮 { background: var(--surface-muted); color: var(--ink); border-color: var(--border); }
+[data-theme="dark"] .备份提醒条 .备份次钮 { background: transparent; color: var(--ink-2); border-color: var(--border); }
+
 /* ============ 外观与登录页自定义（v3 双栏预览） ============ */
 .外设页 {
   display: flex;

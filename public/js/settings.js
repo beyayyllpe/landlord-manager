@@ -606,7 +606,7 @@ function 外设磁贴HTML(标题, target, has, kind, cls) {
       : `<img src="${url}" alt="${标题}">`);
   return `
     <div class="外设磁贴">
-      <div class="外设磁贴框 ${cls || ''}" onclick="${has ? `放大预览登录背景('${target}','${kind || 'image'}')` : `document.getElementById('外设传_${target}').click()`}">
+      <div class="外设磁贴框 ${cls || ''}" onclick="${has ? `放大预览登录背景('${kind || 'image'}','${target}')` : `document.getElementById('外设传_${target}').click()`}">
         ${预览内容}
       </div>
       <div class="外设磁贴脚">
@@ -705,10 +705,10 @@ async function 设置_主题() {
   ].join(''));
 
   const 背景面板 = 面板('bg', [
-    外设行HTML('背景图片', '电脑 / 手机独立配置',
+    外设行HTML('背景图片', '',
       `<div class="外设磁贴列 双格">
-        ${外设磁贴HTML('16:9 电脑端', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
-        ${外设磁贴HTML('9:16 手机端', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
+        ${外设磁贴HTML('16:9', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
+        ${外设磁贴HTML('9:16', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
       </div>`, '顶对齐'),
     外设行HTML('背景填充', '',
       外设分段HTML('bgFit', [['fill', '铺满裁切'], ['fit', '完整显示']], c.bgFit)),
