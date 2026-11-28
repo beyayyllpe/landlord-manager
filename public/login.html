@@ -619,8 +619,35 @@
           }
           const sub1 = document.querySelector('.双线英');
           const sub2 = document.querySelector('.双线副');
-          if (sub1) sub1.style.display = wg.showSub === false ? 'none' : 'flex';
-          if (sub2) sub2.style.display = wg.showDesc === false ? 'none' : 'block';
+          if (Array.isArray(wg.texts)) {
+            if (sub1) sub1.style.display = 'none';
+            if (sub2) sub2.style.display = 'none';
+            let tLayer = document.getElementById('自定义文字层');
+            if (!tLayer) {
+              tLayer = document.createElement('div');
+              tLayer.id = '自定义文字层';
+              tLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2;';
+              document.body.appendChild(tLayer);
+            }
+            const tc = wg.textColor || '#ffffff';
+            const tw = wg.textWeight || '500';
+            const ts = Number(wg.textStroke) || 0;
+            const tsc = wg.textStrokeColor || '#000000';
+            const tsh = wg.textShadow !== undefined ? Number(wg.textShadow) : 8;
+            const shCss = tsh > 0 ? `0 2px ${tsh}px rgba(0,0,0,0.65)` : 'none';
+            const stCss = ts > 0 ? `${ts}px ${tsc}` : '0';
+            tLayer.innerHTML = wg.texts.filter(t => t && String(t.text || '').trim()).map(t => {
+              const txt = String(t.text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+              const tr = ((Number(t.tracking) || 0) / 100).toFixed(2) + 'em';
+              const sty = `position:fixed;left:${Number(t.x ?? 50)}%;top:${Number(t.y ?? 36)}%;transform:translate(-50%,-50%);font-size:${Number(t.size) || 13}px;letter-spacing:${tr};color:${t.color || tc};font-weight:${tw};text-shadow:${shCss};-webkit-text-stroke:${stCss};white-space:nowrap;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:14px;${t.line ? 'width:min(340px,82vw);' : ''}`;
+              return t.line
+                ? `<div class="双线英" style="${sty}"><i style="flex:1;height:1px;background:currentColor;opacity:.45"></i><span style="padding-left:${tr}">${txt}</span><i style="flex:1;height:1px;background:currentColor;opacity:.45"></i></div>`
+                : `<div class="双线副" style="${sty}"><span style="padding-left:${tr}">${txt}</span></div>`;
+            }).join('');
+          } else {
+            if (sub1) sub1.style.display = wg.showSub === false ? 'none' : 'flex';
+            if (sub2) sub2.style.display = wg.showDesc === false ? 'none' : 'block';
+          }
           if (wg.subtitle) {
             const subSpan = document.querySelector('.双线英 span');
             if (subSpan) subSpan.textContent = String(wg.subtitle).trim();

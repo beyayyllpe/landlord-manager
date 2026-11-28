@@ -1091,15 +1091,16 @@ app.post('/api/settings', (req, res) => {
   if ('外观' in 补丁) {
     if (补丁.外观 && typeof 补丁.外观 === 'object' && !Array.isArray(补丁.外观)) {
       const 允许 = [
-        'theme','accent','bgFit','overlay','blur','autoContrast',
+        'theme','bgFit','overlay','blur','autoContrast',
         'logoSize','logoTint','logoStroke','logoStrokeColor','logoShadow',
         'titleY','formY','textColor','textWeight','textStroke','textStrokeColor','textShadow',
-        'subtitle','subDesc','subSize','subTracking','showSub','showDesc','showFoot','customCss'
+        'texts','showFoot','customCss'
       ];
       const 净 = {};
       for (const k of 允许) {
         if (k in 补丁.外观) 净[k] = 补丁.外观[k];
       }
+      if (Array.isArray(净.texts)) 净.texts = 净.texts.slice(0, 10);
       补丁.外观 = 净;
     } else {
       delete 补丁.外观;

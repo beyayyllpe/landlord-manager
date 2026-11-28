@@ -2748,6 +2748,77 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设滑块 input[type="range"] { flex: 1; accent-color: var(--ink); cursor: pointer; }
 .外设开关 input:checked + .外设开关轨 { background: var(--ink); border-color: var(--ink); }
 .外设预览操作 { display: flex; align-items: center; gap: 6px; }
+.外设文卡 {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.外设文头 { display: flex; align-items: center; gap: 8px; }
+.外设文头 .外设输入框 { flex: 1; }
+.外设文增钮 {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.外设文增钮:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--surface-muted);
+}
+.外设文增标 {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-subtle);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+.外设文格 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+}
+.外设文项 { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.外设文项 span { min-width: 30px; flex-shrink: 0; }
+.外设文项 input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ink); cursor: pointer; }
+.外设文项 output { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.外设预览文字层 { position: absolute; inset: 0; pointer-events: none; }
+.外设预览文项 {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.外设预览文项.带双线 { width: 340px; }
+.外设预览文项.带双线 i { flex: 1; height: 1px; background: currentColor; opacity: .45; }
+.外设预览文项 em { font-style: normal; }
+@media (max-width: 640px) { .外设文格 { grid-template-columns: 1fr; } }
 .外设卡 {
   background: var(--surface);
   border: 1px solid var(--border);

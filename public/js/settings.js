@@ -266,19 +266,17 @@ function 默认外观配置() {
     logoStroke: 0,
     logoStrokeColor: '#000000',
     logoShadow: 10,
-    titleY: 28,
+    titleY: 24,
     formY: 62,
     textColor: '#ffffff',
     textWeight: '500',
     textStroke: 0,
     textStrokeColor: '#000000',
     textShadow: 8,
-    subtitle: 'Rental Keeper',
-    subDesc: 'Property · Billing · Occupancy',
-    subSize: 13,
-    subTracking: 42,
-    showSub: true,
-    showDesc: true,
+    texts: [
+      { text: 'Rental Keeper', line: true, color: '#ffffff', y: 34, x: 50, size: 13, tracking: 42 },
+      { text: 'Property · Billing · Occupancy', line: false, color: '#ffffff', y: 39, x: 50, size: 12, tracking: 18 }
+    ],
     showFoot: true,
     customCss: ''
   };
@@ -418,24 +416,18 @@ function 渲染预览舞台到(后缀) {
     }
   }
 
-  const subBox = document.getElementById('外设预览双线' + 后缀);
-  const subTxt = document.getElementById('外设预览双线字' + 后缀);
-  const subDesc = document.getElementById('外设预览标语' + 后缀);
-  if (subBox) {
-    subBox.style.display = c.showSub ? 'flex' : 'none';
-    subBox.style.fontSize = `${Number(c.subSize) || 13}px`;
-    const tr = ((Number(c.subTracking) || 42) / 100).toFixed(2) + 'em';
-    subBox.style.letterSpacing = tr;
-  }
-  if (subTxt) {
-    subTxt.textContent = String(c.subtitle ?? 'Rental Keeper').trim();
-    const tr = ((Number(c.subTracking) || 42) / 100).toFixed(2) + 'em';
-    subTxt.style.paddingLeft = tr;
-  }
-  if (subDesc) {
-    const descTxt = String(c.subDesc ?? 'Property · Billing · Occupancy').trim();
-    subDesc.style.display = (c.showDesc !== false && descTxt) ? 'block' : 'none';
-    subDesc.textContent = descTxt;
+  const textLayer = document.getElementById('外设预览文字层' + 后缀);
+  if (textLayer) {
+    const list = Array.isArray(c.texts) ? c.texts : [];
+    textLayer.innerHTML = list.filter(t => t && String(t.text || '').trim()).map(t => {
+      const tr = ((Number(t.tracking) || 0) / 100).toFixed(2) + 'em';
+      const itemColor = t.color || tc;
+      const sty = `left:${Number(t.x ?? 50)}%;top:${Number(t.y ?? 34)}%;font-size:${Number(t.size) || 13}px;letter-spacing:${tr};color:${itemColor};font-weight:${tw};text-shadow:${textShadowCss};-webkit-text-stroke:${textStrokeCss};`;
+      const cls = t.line ? '外设预览文项 双线英 带双线' : '外设预览文项 双线副';
+      return t.line
+        ? `<div class="${cls}" style="${sty}"><i></i><em style="padding-left:${tr}">${转义(t.text)}</em><i></i></div>`
+        : `<div class="${cls}" style="${sty}"><em style="padding-left:${tr}">${转义(t.text)}</em></div>`;
+    }).join('');
   }
 
   const formBox = document.getElementById('外设预览表单' + 后缀);
@@ -503,9 +495,8 @@ function 外设放大预览() {
           <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
           <div class="外设预览标题区 双线头部" id="外设预览标题区_大">
             <div class="Logo滤镜盒" id="外设预览Logo盒_大"><div class="Logo着色层" id="外设预览Logo着色_大"><img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图"></div></div>
-            <div class="外设预览双线 双线英" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-            <div class="外设预览标语 双线副" id="外设预览标语_大">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
           </div>
+          <div class="外设预览文字层" id="外设预览文字层_大"></div>
           <div class="外设预览表单 登录卡" id="外设预览表单_大">
             <div class="外设预览假框">账号 / Account</div>
             <div class="外设预览假框">密码 / Password</div>
@@ -677,6 +668,40 @@ function 外设分组HTML(名) {
   return `<h4 class="外设分组名">${名}</h4>`;
 }
 
+function 外设文改(idx, 键, 值, el) {
+  if (!外设草稿) return;
+  if (!Array.isArray(外设草稿.texts)) 外设草稿.texts = 默认外观配置().texts;
+  const item = 外设草稿.texts[idx];
+  if (!item) return;
+  item[键] = (键 === 'text' || 键 === 'color') ? String(值) : (键 === 'line' ? Boolean(值) : Number(值));
+  if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
+    el.nextElementSibling.textContent = 键 === 'size' ? `${值}px` : (键 === 'tracking' ? `${(Number(值)/100).toFixed(2)}em` : `${值}%`);
+  }
+  更新外设预览();
+}
+
+function 外设文增() {
+  if (!外设草稿) return;
+  if (!Array.isArray(外设草稿.texts)) 外设草稿.texts = [];
+  const last = 外设草稿.texts[外设草稿.texts.length - 1] || { text: '', line: false, color: '#ffffff', y: 36, x: 50, size: 13, tracking: 20 };
+  外设草稿.texts.push({
+    text: last.text ? `${last.text}` : '自定义文字',
+    line: false,
+    color: last.color || '#ffffff',
+    y: Math.min(88, (Number(last.y) || 34) + 6),
+    x: Number(last.x ?? 50),
+    size: Number(last.size || 13),
+    tracking: Number(last.tracking || 20)
+  });
+  渲染设置页();
+}
+
+function 外设文删(idx) {
+  if (!外设草稿 || !Array.isArray(外设草稿.texts)) return;
+  外设草稿.texts.splice(idx, 1);
+  渲染设置页();
+}
+
 function 外设切标签(键) {
   外设当前标签 = 键;
   document.querySelectorAll('[data-面板]').forEach(el => { el.hidden = el.dataset.面板 !== 键; });
@@ -695,9 +720,8 @@ async function 设置_主题() {
     外设快照.theme = 主题;
   }
   const c = 外设草稿;
+  if (!Array.isArray(c.texts)) c.texts = 默认外观配置().texts;
   const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
-  const 副标题 = 转义(c.subtitle || 'Rental Keeper');
-  const 标语 = 转义(c.subDesc || 'Property · Billing · Occupancy');
 
   setTimeout(更新外设预览, 0);
 
@@ -746,31 +770,28 @@ async function 设置_主题() {
     外设行HTML('标题位置', '距离顶部的百分比',
       外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
 
-    外设分组HTML('双线装饰'),
-    外设行HTML('双线英文', '标题下方两条线中间的文字',
-      `${外设开关HTML('showSub', c.showSub)}
-       <input type="text" class="外设输入框" value="${副标题}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">`),
-    外设行HTML('双线字号', '',
-      外设滑块HTML('subSize', 10, 24, 1, c.subSize || 13)),
-    外设行HTML('双线字距', '',
-      外设滑块HTML('subTracking', 10, 80, 1, c.subTracking || 42)),
-    外设行HTML('英文小标语', '双线下方的小字',
-      `${外设开关HTML('showDesc', c.showDesc !== false)}
-       <input type="text" class="外设输入框" value="${标语}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">`),
+    外设分组HTML('自由文字（上下 / 左右 / 大小 / 间距）'),
+    c.texts.map((t, i) => `
+      <div class="外设文卡">
+        <div class="外设文头">
+          <input type="color" class="外设取色" value="${t.color || c.textColor || '#ffffff'}" oninput="外设文改(${i},'color',this.value)" title="该行文字颜色">
+          <input type="text" class="外设输入框" value="${转义(t.text || '')}" maxlength="60" oninput="外设文改(${i},'text',this.value)" placeholder="输入任意文字...">
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${t.line ? 'checked' : ''} onchange="外设文改(${i},'line',this.checked)">双线
+          </label>
+          <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
+        </div>
+        <div class="外设文格">
+          <label class="外设文项"><span>上下</span><input type="range" min="5" max="92" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="10" max="36" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
+          <label class="外设文项"><span>间距</span><input type="range" min="0" max="80" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
+        </div>
+      </div>`).join(''),
+    `<button type="button" class="外设文增钮" onclick="外设文增()"><span class="外设文增标">＋</span><span>添加一行文字</span></button>`,
   ].join(''));
 
   const 表单面板 = 面板('form', [
-    外设分组HTML('文字'),
-    外设行HTML('文字颜色与字重', '',
-      `${外设取色HTML('textColor', c.textColor || '#ffffff', '文字颜色')}
-       ${外设分段HTML('textWeight', [['300', '细'], ['400', '常规'], ['600', '中粗'], ['700', '粗']], String(c.textWeight || '500'))}`),
-    外设行HTML('文字描边', '',
-      `${外设取色HTML('textStrokeColor', c.textStrokeColor || '#000000', '文字描边颜色')}
-       ${外设滑块HTML('textStroke', 0, 2, 0.3, c.textStroke || 0)}`),
-    外设行HTML('文字阴影', '',
-      外设滑块HTML('textShadow', 0, 24, 1, c.textShadow ?? 8)),
-
-    外设分组HTML('表单与布局'),
     外设行HTML('表单位置', '距离顶部的百分比',
       外设滑块HTML('formY', 40, 86, 1, c.formY)),
     外设行HTML('玻璃模糊', '透明表单的磨砂强度',
@@ -828,9 +849,8 @@ async function 设置_主题() {
               <div class="外设预览遮罩" id="外设预览遮罩"></div>
               <div class="外设预览标题区 双线头部" id="外设预览标题区">
                 <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图"></div></div>
-                <div class="外设预览双线 双线英" id="外设预览双线"><i></i><em id="外设预览双线字">${副标题}</em><i></i></div>
-                <div class="外设预览标语 双线副" id="外设预览标语">${标语}</div>
               </div>
+              <div class="外设预览文字层" id="外设预览文字层"></div>
               <div class="外设预览表单 登录卡" id="外设预览表单">
                 <div class="外设预览假框">账号 / Account</div>
                 <div class="外设预览假框">密码 / Password</div>
