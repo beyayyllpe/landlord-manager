@@ -361,7 +361,7 @@ function 渲染预览舞台到(后缀) {
   stage.style.setProperty('--preview-accent', c.accent || '#18181b');
 
   const 基准宽 = 是电脑 ? 1280 : 390;
-  const 壳宽 = shell.clientWidth || (是电脑 ? 360 : 248);
+  const 壳宽 = shell.clientWidth || (是电脑 ? 450 : 292);
   stage.style.transform = `scale(${壳宽 / 基准宽})`;
 
   const 有底图 = 是电脑 ? 外设meta.hasBg : (外设meta.mobileHasBg || 外设meta.hasBg);
