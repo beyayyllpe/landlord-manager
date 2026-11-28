@@ -1105,7 +1105,6 @@ async function 设置_主题() {
                 <button type="button" id="外设切手机钮" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
                 <button type="button" id="外设切电脑钮" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
               </div>
-              <button type="button" class="外设小钮" onclick="外设放大预览()">放大</button>
             </div>
           </div>
           <div class="外设预览壳" id="外设预览壳" ondblclick="外设放大预览()" title="双击可放大预览">
