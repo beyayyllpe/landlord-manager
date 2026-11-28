@@ -379,8 +379,9 @@ function 渲染预览舞台到(后缀) {
   if (formBox) {
     formBox.style.top = `${c.formY}%`;
     formBox.className = `外设预览表单 样式-${c.formStyle || 'glass'}`;
-    formBox.style.backdropFilter = c.formStyle === 'glass' ? `blur(${Number(c.blur) || 0}px)` : 'none';
-    formBox.style.webkitBackdropFilter = c.formStyle === 'glass' ? `blur(${Number(c.blur) || 0}px)` : 'none';
+    stage.style.setProperty('--preview-blur', `${Number(c.blur) || 0}px`);
+    formBox.style.backdropFilter = c.formStyle === 'glass' ? 'none' : 'none';
+    formBox.style.webkitBackdropFilter = 'none';
     if (c.formStyle !== 'solid') formBox.style.color = toneColor;
     else formBox.style.color = '#1f2329';
   }
@@ -481,11 +482,16 @@ function 外设字(键, 值) {
 
 function 外设切预览(设备, 保持放大) {
   外设预览设备 = 设备 === 'desktop' ? 'desktop' : 'phone';
+  const btnP = document.getElementById('外设切手机钮');
+  const btnD = document.getElementById('外设切电脑钮');
+  if (btnP) btnP.classList.toggle('选中', 外设预览设备 === 'phone');
+  if (btnD) btnD.classList.toggle('选中', 外设预览设备 === 'desktop');
   if (保持放大) {
     关闭外设放大预览();
     外设放大预览();
+  } else {
+    更新外设预览();
   }
-  渲染设置页();
 }
 
 function 外设撤销() {
@@ -715,8 +721,8 @@ async function 设置_主题() {
             <span>实时预览</span>
             <div style="display:flex;align-items:center;gap:6px">
               <div class="外设分段">
-                <button type="button" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
-                <button type="button" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
+                <button type="button" id="外设切手机钮" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
+                <button type="button" id="外设切电脑钮" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
               </div>
               <button type="button" class="外设小钮" onclick="外设放大预览()">放大预览</button>
             </div>
