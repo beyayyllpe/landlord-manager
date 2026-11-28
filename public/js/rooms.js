@@ -44,45 +44,90 @@ function 交租日显示(房) { if (!房.入住日) return '—'; const d = Numb
 
 // 添加租户表单模式：正常 / 预缴（右上角切换）
 let 房间模式 = '正常';
-// 房间表单（新增/编辑共用；r 为空则空表单，有值则预填；预缴模式多身份证/预缴金/管理费预缴金）
-function 房间表单HTML(r = {}, 编辑 = false) {
-  const 字 = (k, v, 标, 额外 = '') => `<div class="字段"><label>${标 || k}</label><input id="${v}" value="${转义(r[k] ?? '')}" ${额外}></div>`;
-  // 租客姓名填完失焦，自动从客人档案带出身份证和电话（重名会弹选择框）
-  const 姓名框 = 字('租客姓名', 'f租客', null, `onchange="带出客人('f租客','f身份证','f电话')"`);
-  const 数 = (k, v, 标) => `<div class="字段"><label>${标 || k}</label><input id="${v}" type="number" value="${r[k] ?? ''}"></div>`;
-  // 水电单价留空 = 跟随「设置 → 数据 → 水电变量」，标签里带上当前变量值，填了才覆盖
-  const 水标 = `水费单价（空=默认 ${全局.settings.水价}）`, 电标 = `电费单价（空=默认 ${全局.settings.电价}）`;
-  if (房间模式 === '预缴') {
-    return `
-    <div class="行三">${姓名框}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
-    <div class="行">
-      <div class="字段"><label>入住日（几号入住=几号交租）</label><input id="f入住" type="date" value="${r.入住日||''}"></div>
-      <div class="字段"><label>到期日</label><input id="f到期" type="date" value="${r.到期日||''}"></div>
-    </div>
-    <div class="行">${数('月租金', 'f月租', '月租金 *')}${数('预缴金', 'f预缴金', 编辑 ? '追加预缴（房租）' : '预缴金（房租）')}</div>
-    <div class="行">${数('管理费', 'f管理费', '管理费 *')}${数('管理费预缴金', 'f管理费预缴金', 编辑 ? '追加预缴（管理费）' : '预缴金（管理费）')}</div>
-    <div class="字段"><label>从哪个月开始抵 *</label><input id="f预缴月份" type="month" value="${r.入住日 && !编辑 ? String(r.入住日).slice(0,7) : (全局.settings.当前月份 || '')}"></div>
-    <p style="color:var(--次文字);font-size:13px;margin:-4px 0 10px">
-      预缴金填<b>客人实际交的总额</b>，能抵几个月由月租金自动算：月租 1000 + 预缴 6000 = 抵 6 个月。<br>
-      「从哪个月开始抵」= 这笔钱要管的第一个月。新租客填入住月；住了很久今天才预缴的，本月房租还没收就填本月，已经收过了就填下个月。
-      ${编辑 ? '<br>编辑里填的是<b>追加</b>一笔，不会覆盖已有的。留空金额就不追加，已有的在列表页绿色「预缴」按钮里查看和删除。' : ''}
-    </p>
-    <div class="行">${数('押金', 'f押金')}${数('房卡押金', 'f房卡押金')}</div>
-    <div class="行">${数('水费单价', 'f水单价', 水标)}${数('电费单价', 'f电单价', 电标)}</div>
-    <div class="行">${数('水表底度', 'f水底')}${数('电表底度', 'f电底')}</div>
-    ${字('备注', 'f备注')}`;
-  }
+// 房间表单（新增/编辑共用；r 为空则空表单，有值则预填；预缴模式实时试算可抵月数与期间）
+function 房间表单HTML(r = {}, 编辑 = false, 房号控件HTML = '') {
+  const 预缴开 = 房间模式 === '预缴';
+  const 字 = (k, id, 标, 占位 = '', 额外 = '') => `<div class="房表字段"><label>${标}</label><input id="${id}" value="${转义(r[k] ?? '')}" placeholder="${占位}" ${额外}></div>`;
+  const 数 = (k, id, 标, 占位 = '0', 额外 = '') => `<div class="房表字段"><label>${标}</label><input id="${id}" type="number" value="${r[k] ?? ''}" placeholder="${占位}" ${额外}></div>`;
+  const 默认月 = r.入住日 && !编辑 ? String(r.入住日).slice(0, 7) : (全局.settings.当前月份 || '');
   return `
-    <div class="行三">${姓名框}${字('电话', 'f电话')}${字('身份证', 'f身份证')}</div>
-    <div class="行">
-      <div class="字段"><label>入住日（几号入住=几号交租）</label><input id="f入住" type="date" value="${r.入住日||''}"></div>
-      <div class="字段"><label>到期日</label><input id="f到期" type="date" value="${r.到期日||''}"></div>
-    </div>
-    <div class="行四">${数('月租金', 'f月租', '月租金 *')}${数('押金', 'f押金')}${数('房卡押金', 'f房卡押金')}${数('管理费', 'f管理费', '管理费 *')}</div>
-    <div class="行">${数('水费单价', 'f水单价', 水标)}${数('电费单价', 'f电单价', 电标)}</div>
-    <div class="行">${数('水表底度', 'f水底')}${数('电表底度', 'f电底')}</div>
-    ${字('备注', 'f备注')}`;
+    ${房号控件HTML ? `<div class="房表选房">${房号控件HTML}</div>` : ''}
+
+    <section class="房表节">
+      <div class="房表节头"><span class="条"></span><h2>租客信息</h2></div>
+      <div class="房表网 三">
+        ${字('租客姓名', 'f租客', '租客姓名', '请输入姓名', `onchange="带出客人('f租客','f身份证','f电话')"`)}
+        ${字('电话', 'f电话', '电话', '手机号码', 'inputmode="tel"')}
+        ${字('身份证', 'f身份证', '身份证', '身份证号码')}
+      </div>
+    </section>
+
+    <section class="房表节">
+      <div class="房表节头"><span class="条"></span><h2>租期</h2><span class="注">几号入住 = 每月几号交租</span></div>
+      <div class="房表网">
+        <div class="房表字段"><label>入住日</label><input id="f入住" type="date" value="${r.入住日 || ''}"></div>
+        <div class="房表字段"><label>到期日</label><input id="f到期" type="date" value="${r.到期日 || ''}"></div>
+      </div>
+    </section>
+
+    <section class="房表节">
+      <div class="房表节头"><span class="条"></span><h2>费用</h2></div>
+      <div class="房表网">
+        ${数('月租金', 'f月租', '月租金<span class="req">*</span>', '0', 'oninput="更新预缴试算()"')}
+        ${数('管理费', 'f管理费', '管理费<span class="req">*</span>', '0')}
+        ${数('押金', 'f押金', '押金', '0')}
+        ${数('房卡押金', 'f房卡押金', '房卡押金', '0')}
+      </div>
+    </section>
+
+    ${预缴开 ? `
+    <section class="房表节">
+      <div class="房表节头"><span class="条"></span><h2>预缴信息</h2><span class="注">${编辑 ? '填追加金额，不覆盖已有记录' : '预缴金按实际交的总额填写'}</span></div>
+      <div class="房表网">
+        <div class="房表字段"><label>${编辑 ? '追加预缴（房租）' : '预缴金（房租）'}</label><input id="f预缴金" type="number" value="${r.预缴金 ?? ''}" placeholder="0" oninput="更新预缴试算()"></div>
+        <div class="房表字段"><label>${编辑 ? '追加预缴（管理费）' : '预缴金（管理费）'}</label><input id="f管理费预缴金" type="number" value="${r.管理费预缴金 ?? ''}" placeholder="0"></div>
+        <div class="房表字段 整行"><label>从哪个月开始抵<span class="req">*</span></label><input id="f预缴月份" type="month" value="${默认月}" oninput="更新预缴试算()"></div>
+      </div>
+      <div class="房表试算" id="预缴试算卡">
+        <div class="大数" id="预缴试算月数">0<small>个月</small></div>
+        <div class="文" id="预缴试算范围">请填写月租金与预缴金额</div>
+        <div class="文 副">能抵月数 = 预缴金 ÷ 月租金，向下取整</div>
+      </div>
+    </section>` : ''}
+
+    <section class="房表节">
+      <div class="房表节头"><span class="条"></span><h2>单价与抄表</h2><span class="注">空白则使用默认单价</span></div>
+      <div class="房表网">
+        <div class="房表字段"><label>水费单价<span class="默认标">默认 ${全局.settings.水价}</span></label><input id="f水单价" type="number" value="${r.水费单价 ?? ''}" placeholder="留空使用默认"></div>
+        <div class="房表字段"><label>电费单价<span class="默认标">默认 ${全局.settings.电价}</span></label><input id="f电单价" type="number" value="${r.电费单价 ?? ''}" placeholder="留空使用默认"></div>
+        ${数('水表底度', 'f水底', '水表底度', '0')}
+        ${数('电表底度', 'f电底', '电表底度', '0')}
+      </div>
+    </section>
+
+    <section class="房表节">
+      <div class="房表字段"><label>备注</label><textarea id="f备注" rows="1" placeholder="例如：电费下调、特殊约定等">${转义(r.备注 ?? '')}</textarea></div>
+    </section>`;
 }
+window.更新预缴试算 = function() {
+  const 月数el = document.getElementById('预缴试算月数');
+  const 范围el = document.getElementById('预缴试算范围');
+  if (!月数el || !范围el) return;
+  const 月租 = parseFloat(document.getElementById('f月租')?.value);
+  const 预缴 = parseFloat(document.getElementById('f预缴金')?.value);
+  const 起始 = document.getElementById('f预缴月份')?.value;
+  if (!(月租 > 0) || !(预缴 > 0) || !起始) {
+    月数el.innerHTML = '0<small>个月</small>';
+    范围el.textContent = '请填写月租金与预缴金额';
+    return;
+  }
+  const 月数 = Math.floor(预缴 / 月租);
+  月数el.innerHTML = `${月数}<small>个月</small>`;
+  const [y, m] = 起始.split('-').map(Number);
+  const 止 = new Date(y, m - 1 + Math.max(0, 月数 - 1), 1);
+  const fmt = d => `${d.getFullYear()}年${d.getMonth() + 1}月`;
+  范围el.textContent = 月数 > 0 ? `抵扣期间：${fmt(new Date(y, m - 1, 1))} – ${fmt(止)}` : '预缴金不足一个月租金';
+};
 function 收集房间数据() {
   return {
     月租金: document.getElementById('f月租').value, 押金: document.getElementById('f押金').value,
@@ -106,26 +151,31 @@ window.打开房间模态 = async function(预设房号, 已选房号) {
   // 与总览「空置房间」口径一致：排除在租 + 日租房/自住房（见 server.js 的 /api/summary），
   // 否则自住房/日租房也会出现在添加租户的下拉里
   const 空置房号 = 房源.filter(h => !在租房号.has(h.房号) && h.房型 !== '日租' && h.房型 !== '自住房').map(h => h.房号);
-  // 从空置房「出租」进入时锁定房号；点「+ 新增房间」时下拉选空置房号
+  // 从空置房「出租」进入时锁定房号；点「+ 添加租户」时下拉选空置房号
   const 房号控件 = 预设房号
-    ? `<input id="f房号" value="${转义(预设房号)}" disabled>`
-    : `<select id="f房号"><option value="">请选择房号</option>${空置房号.map(f => `<option ${f === (已选房号 || '') ? 'selected' : ''}>${转义(f)}</option>`).join('')}</select>`;
-  const 房号行 = `<div class="字段" style="text-align:center"><label>房号 *</label><div style="display:flex;justify-content:center">${房号控件}</div></div>`;
-  打开模态(`<h2>${预设房号 ? `出租房间 ${转义(预设房号)}` : '添加租户'}</h2>
-    <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:12px">
-      <button class="btn 行内 ${房间模式==='正常'?'':'次'}" onclick="切房间模式('正常')">正常模式</button>
-      <button class="btn 行内 ${房间模式==='预缴'?'':'次'}" onclick="切房间模式('预缴')">预缴模式</button>
-    </div>
-    <div class="表单块">
-      ${房号行}
-      ${房间表单HTML()}
-    </div>
-    <div style="margin-top:16px;display:flex;justify-content:flex-end">
-      <div class="分段操作栏">
-        <button type="button" class="分段钮" onclick="请求关闭模态()">取消</button>
-        <button type="button" class="分段钮 绿" onclick="保存房间()">保存</button>
+    ? `<div class="标">出租房间<br><b>房号已选定</b></div><input id="f房号" class="选房框" value="${转义(预设房号)}" disabled>`
+    : `<div class="标">选择房间<br><b>房号必选</b></div><select id="f房号" class="选房框"><option value="">请选择房号</option>${空置房号.map(f => `<option ${f === (已选房号 || '') ? 'selected' : ''}>${转义(f)}</option>`).join('')}</select>`;
+  打开模态(`
+    <div class="房表外卡">
+      <header class="房表头">
+        <div>
+          <h1>${预设房号 ? `出租房间 ${转义(预设房号)}` : '添加租户'}</h1>
+          <p>填写租客信息、租期与费用，带 <span class="req">*</span> 为必填</p>
+        </div>
+        <div class="房表分段" role="group" aria-label="录入模式">
+          <button type="button" aria-pressed="${房间模式 === '正常'}" onclick="切房间模式('正常')">正常模式</button>
+          <button type="button" aria-pressed="${房间模式 === '预缴'}" onclick="切房间模式('预缴')">预缴模式</button>
+        </div>
+      </header>
+      <div class="房表正文">
+        ${房间表单HTML({}, false, 房号控件)}
       </div>
+      <footer class="房表底栏">
+        <button type="button" class="btn 次" onclick="请求关闭模态()">取消</button>
+        <button type="button" class="btn" onclick="保存房间()">保存</button>
+      </footer>
     </div>`);
+  if (房间模式 === '预缴') 更新预缴试算();
 };
 window.切房间模式 = function(模式) {
   房间模式 = 模式;
@@ -138,6 +188,8 @@ window.切房间模式 = function(模式) {
 window.保存房间 = async function() {
   const 数据 = { 房号: document.getElementById('f房号').value, ...收集房间数据() };
   if (!数据.房号) { 提示('请选择房号'); return; }
+  const 话 = 校验手机号(数据.电话);
+  if (!话.有效) { 提示('手机号' + 话.原因); return; }
   const 证 = 校验身份证(数据.身份证);
   if (!证.有效) { 提示('身份证' + 证.原因); return; }
   if (!(await 询问确认('确认保存？', `${转义(数据.房号)}　出租信息`))) return;
@@ -150,19 +202,28 @@ window.打开编辑模态 = async function(房号) {
   const rooms = await api('/api/rooms');
   const r = rooms.find(x => x.房号 === 房号);
   if (!r) return;
-  打开模态(`<h2>编辑房间 ${转义(房号)}</h2>
-    <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:12px">
-      <button class="btn 行内 ${房间模式==='正常'?'':'次'}" onclick="切编辑模式('正常','${转义(房号)}')">正常模式</button>
-      <button class="btn 行内 ${房间模式==='预缴'?'':'次'}" onclick="切编辑模式('预缴','${转义(房号)}')">预缴模式</button>
-    </div>
-    <div class="表单块">
-      <div class="字段"><label>房号</label><input id="f房号" value="${转义(房号)}" disabled></div>
-      ${房间表单HTML(r, true)}
-    </div>
-    <div style="margin-top:14px;display:flex;gap:8px">
-      <button class="btn" onclick="保存编辑('${转义(房号)}')">保存</button>
-      <button class="btn 次" onclick="请求关闭模态()">取消</button>
+  const 房号控件 = `<div class="标">当前房间<br><b>房号锁定</b></div><input id="f房号" class="选房框" value="${转义(房号)}" disabled>`;
+  打开模态(`
+    <div class="房表外卡">
+      <header class="房表头">
+        <div>
+          <h1>编辑房间 ${转义(房号)}</h1>
+          <p>修改租客信息、租期或费用，带 <span class="req">*</span> 为必填</p>
+        </div>
+        <div class="房表分段" role="group" aria-label="录入模式">
+          <button type="button" aria-pressed="${房间模式 === '正常'}" onclick="切编辑模式('正常','${转义(房号)}')">正常模式</button>
+          <button type="button" aria-pressed="${房间模式 === '预缴'}" onclick="切编辑模式('预缴','${转义(房号)}')">预缴模式</button>
+        </div>
+      </header>
+      <div class="房表正文">
+        ${房间表单HTML(r, true, 房号控件)}
+      </div>
+      <footer class="房表底栏">
+        <button type="button" class="btn 次" onclick="请求关闭模态()">取消</button>
+        <button type="button" class="btn" onclick="保存编辑('${转义(房号)}')">保存</button>
+      </footer>
     </div>`);
+  if (房间模式 === '预缴') 更新预缴试算();
 };
 // 编辑弹窗里切模式：没预缴的租客改成预缴模式，就是在这里切
 window.切编辑模式 = function(模式, 房号) { 房间模式 = 模式; 关闭模态(); 打开编辑模态(房号); };
@@ -170,34 +231,121 @@ window.保存编辑 = async function(房号) {
   const rooms = await api('/api/rooms');
   const r = rooms.find(x => x.房号 === 房号);
   if (!r) return;
+  const 话 = 校验手机号(document.getElementById('f电话')?.value || '');
+  if (!话.有效) { 提示('手机号' + 话.原因); return; }
   const 证 = 校验身份证(document.getElementById('f身份证')?.value || '');
   if (!证.有效) { 提示('身份证' + 证.原因); return; }
   if (!(await 询问确认('确认保存？', `${转义(房号)}　房间信息修改`))) return;
   await api(`/api/rooms/${r.id}`, { method: 'PUT', body: 收集房间数据() }); // 房号由 URL 定位，不可改
   提示('已保存'); 关闭模态(); 渲染();
 };
-// 房间详情弹框（完整字段，左→右排列）
+// 房间详情弹框（Hero + 三核心指标 + 分节明细 + 备注提示卡 + 底部操作）
 window.打开详情 = async function(房号) {
   const rooms = await api('/api/rooms');
   const r = rooms.find(x => x.房号 === 房号);
   if (!r) return;
-  const 行 = (k, v) => `<div class="详情项"><span class="详情键">${k}</span><span class="详情值">${转义(v == null || v === '' ? '—' : v)}</span></div>`;
-  const 金额 = (v) => (v !== '' && v != null) ? 数字(v) : '';
-  打开模态(`<h2>房间详情 ${转义(房号)}</h2>
-    <div class="详情格">
-      ${行('租客', r.租客姓名)}${行('电话', r.电话)}
-      ${行('入住日', r.入住日)}${行('到期日', r.到期日)}
-      ${行('月租金', 金额(r.月租金))}${行('押金', 金额(r.押金))}
-      ${行('房卡押金', 金额(r.房卡押金))}${行('管理费', 金额(r.管理费))}
-      ${行('水费单价', r.水费单价 || '默认')}${行('电费单价', r.电费单价 || '默认')}
-      ${行('水表底度', r.水表底度)}${行('电表底度', r.电表底度)}
-      ${(r.预缴笔数 || 0) > 0 ? 行('预缴余额', '¥' + 数字(r.预缴余额 || 0) + `（房租还能抵 ${r.预缴剩余月数 || 0} 个月）`) : ''}
-      ${行('备注', r.备注)}
-    </div>
-    <div style="margin-top:14px;display:flex;gap:8px">
-      ${(r.预缴笔数 || 0) > 0 ? `<button class="btn 成功" onclick="关闭模态();打开预缴模态('${转义(房号)}')">预缴明细</button>` : ''}
-      <button class="btn" onclick="关闭模态();打开编辑模态('${转义(房号)}')">编辑</button>
-      <button class="btn 次" onclick="请求关闭模态()">关闭</button>
+  const 金额 = v => (v !== '' && v != null) ? 数字(v) : '0';
+  const 字段 = (k, v, 空字 = '暂无', html = false) => {
+    const 无值 = v == null || v === '';
+    const 内容 = 无值 ? 空字 : (html ? v : 转义(v));
+    return `<div class="房详字段"><span class="k">${k}</span><span class="v${无值 ? ' 房详空' : ''}">${内容}</span></div>`;
+  };
+  const 交租号 = 交租日显示(r);
+  const 入住展示 = r.入住日 ? `${转义(r.入住日)}${交租号 !== '—' ? ` · ${交租号}` : ''}` : '';
+  const 电话Html = r.电话 ? `<a href="tel:${转义(r.电话)}" style="color:inherit;text-decoration:none">${转义(r.电话)}</a>` : '';
+  const 水价展示 = (r.水费单价 !== '' && r.水费单价 != null) ? `${精金额(r.水费单价)} 元/方` : `默认（${全局.settings.水价} 元/方）`;
+  const 电价展示 = (r.电费单价 !== '' && r.电费单价 != null) ? `${精金额(r.电费单价)} 元/度` : `默认（${全局.settings.电价} 元/度）`;
+  const 有预缴 = (r.预缴笔数 || 0) > 0;
+
+  打开模态(`
+    <div class="房详外卡">
+      <header class="房详卡头">
+        <div>
+          <div class="房详眉标">Room Detail</div>
+          <div class="房详标题">${转义(r.房号)}<small>房间详情</small></div>
+        </div>
+        <span class="房详状态">${有预缴 ? '已预缴 · 在租' : '在租中'}</span>
+      </header>
+
+      <section class="房详四指标">
+        <div class="房详指标 主">
+          <div class="标">月租金</div>
+          <div class="数">${金额(r.月租金)}<em>元/月</em></div>
+        </div>
+        <div class="房详指标">
+          <div class="标">管理费</div>
+          <div class="数">${金额(r.管理费)}<em>元/月</em></div>
+        </div>
+        <div class="房详指标">
+          <div class="标">押金</div>
+          <div class="数">${金额(r.押金)}<em>元</em></div>
+        </div>
+        <div class="房详指标">
+          <div class="标">房卡押金</div>
+          <div class="数">${金额(r.房卡押金)}<em>元</em></div>
+        </div>
+      </section>
+
+      <div class="房详正文">
+        <section class="房详节">
+          <div class="房详节头"><span class="条"></span><h2>租客信息</h2></div>
+          <div class="房详网格">
+            ${字段('租客', r.租客姓名)}
+            ${字段('联系电话', 电话Html, '暂无', true)}
+            ${r.身份证 ? 字段('身份证', r.身份证) : ''}
+          </div>
+        </section>
+
+        <section class="房详节">
+          <div class="房详节头"><span class="条"></span><h2>租期</h2></div>
+          <div class="房详网格">
+            ${字段('入住日期', 入住展示, '暂无', true)}
+            ${字段('到期日期', r.到期日)}
+          </div>
+        </section>
+
+        <section class="房详节">
+          <div class="房详节头"><span class="条"></span><h2>费用标准</h2></div>
+          <div class="房详网格">
+            ${字段('水费单价', 水价展示)}
+            ${字段('电费单价', 电价展示)}
+          </div>
+        </section>
+
+        <section class="房详节">
+          <div class="房详节头"><span class="条"></span><h2>抄表读数</h2></div>
+          <div class="房详网格">
+            ${字段('水表底度', r.水表底度)}
+            ${字段('电表底度', r.电表底度)}
+          </div>
+        </section>
+
+        ${有预缴 ? `
+        <section class="房详节">
+          <div class="房详节头"><span class="条"></span><h2>预缴抵扣</h2></div>
+          <div class="房详网格">
+            ${字段('预缴余额', `¥${数字(r.预缴余额 || 0)}`)}
+            ${字段('房租可抵', `${r.预缴剩余月数 || 0} 个月`)}
+          </div>
+        </section>` : ''}
+
+        ${r.备注 ? `
+        <section class="房详节">
+          <div class="房详备注">
+            <span class="标">!</span>
+            <div>
+              <div class="名">备注</div>
+              <div class="文">${转义(r.备注)}</div>
+            </div>
+          </div>
+        </section>` : ''}
+      </div>
+
+      <footer class="房详底栏">
+        ${有预缴 ? `<button type="button" class="btn 成功" onclick="关闭模态();打开预缴模态('${转义(房号)}')">预缴明细</button>` : ''}
+        <button type="button" class="btn 次" onclick="请求关闭模态()">关闭</button>
+        <button type="button" class="btn" onclick="关闭模态();打开编辑模态('${转义(房号)}')">编辑</button>
+      </footer>
     </div>`);
 };
 window.删除房源 = async function(id) { if (!await 询问确认('删除房源', '确定删除这个房源？')) return; const r = await api(`/api/houses/${id}`, { method: 'DELETE' }); if (r.错误) { 提示(r.错误); return; } 提示('已删除'); 渲染(); };
@@ -250,7 +398,13 @@ window.打开退房模态 = async function(房号) {
     </div>`);
 };
 window.确认退房 = async function(房号) {
-  const body = { 房号, 日期: document.getElementById('退日期').value, 上月水底: document.getElementById('退上月水').value, 上月电底: document.getElementById('退上月电').value, 退房水底: document.getElementById('退水底').value, 退房电底: document.getElementById('退电底').value, 退房卫生费: document.getElementById('退卫生费').value, 房间损耗: document.getElementById('退损耗').value, 损耗说明: document.getElementById('退损耗说明').value, 退押金: document.getElementById('退押金')?.checked ?? true, 退房卡押金: document.getElementById('退房卡押金')?.checked ?? true, 留存金额: document.getElementById('退留存')?.value || 0, 电话: document.getElementById('退电话')?.value || '', 身份证: document.getElementById('退身份证')?.value || '', 备注: document.getElementById('退备注')?.value || '' };
+  const 退电话 = document.getElementById('退电话')?.value || '';
+  const 话 = 校验手机号(退电话);
+  if (!话.有效) { 提示('手机号' + 话.原因); return; }
+  const 退证 = document.getElementById('退身份证')?.value || '';
+  const 证 = 校验身份证(退证);
+  if (!证.有效) { 提示('身份证' + 证.原因); return; }
+  const body = { 房号, 日期: document.getElementById('退日期').value, 上月水底: document.getElementById('退上月水').value, 上月电底: document.getElementById('退上月电').value, 退房水底: document.getElementById('退水底').value, 退房电底: document.getElementById('退电底').value, 退房卫生费: document.getElementById('退卫生费').value, 房间损耗: document.getElementById('退损耗').value, 损耗说明: document.getElementById('退损耗说明').value, 退押金: document.getElementById('退押金')?.checked ?? true, 退房卡押金: document.getElementById('退房卡押金')?.checked ?? true, 留存金额: document.getElementById('退留存')?.value || 0, 电话: 退电话, 身份证: 退证, 备注: document.getElementById('退备注')?.value || '' };
   if (!(await 询问确认('确认退房？', `${转义(房号)}　退房后房间变空置，结算结果见退租结算单`))) return;
   const r = await api('/api/checkout', { method: 'POST', body });
   if (r.错误) { 提示(r.错误); return; }

@@ -206,6 +206,19 @@ function 解析Cookie(req, 名) {
 function 是HTTPS请求(req) {
   return Boolean(req.secure || String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https');
 }
+function 取客户端IP(req) {
+  const 候选 = [
+    req.headers['cf-connecting-ip'],
+    req.headers['x-real-ip'],
+    String(req.headers['x-forwarded-for'] || '').split(',')[0],
+    req.socket && req.socket.remoteAddress
+  ];
+  for (const v of 候选) {
+    const s = String(v || '').trim().replace(/^::ffff:/, '');
+    if (s) return s;
+  }
+  return '';
+}
 function 写登录Cookie(res, req, token) {
   const 属性 = [`${会话Cookie名}=${encodeURIComponent(token)}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${会话有效期秒}`];
   if (是HTTPS请求(req)) 属性.push('Secure');
@@ -250,44 +263,93 @@ app.get('/login', (req, res) => {
   }
 });
 
-// 登录接口：温和延迟 + 并发节流防爆破（兼容反向代理 127.0.0.1 链路，永不误锁正常用户）
+// 登录接口：按「来源」限流防爆破——同一来源连续输错 5 次锁 5 分钟，输对即清零。
+// 输错固定延迟 2 秒，但延迟不占并发名额（别人无法靠「占坑」把你挡在门外）。
+// 来源 = 真实客户端 IP；反代没透传真实 IP（看到的全是 127.0.0.1）时，退化为「IP + 浏览器标识」。
 let 登录校验并发 = 0;
+const 登录失败表 = new Map();
+const 登录失败上限 = 5, 登录失败窗口 = 10 * 60 * 1000, 登录冷却 = 5 * 60 * 1000;
+function 是回环IP(ip) { return !ip || ip === '127.0.0.1' || ip === '::1'; }
+function 登录来源键(req, ip) {
+  return 是回环IP(ip) ? `lo|${String(req.headers['user-agent'] || '').slice(0, 160)}` : ip;
+}
+function 清理限流表(表) {
+  if (表.size <= 3000) return;
+  const now = Date.now();
+  for (const [k, v] of 表) if (now - (v.起 || v.首次 || 0) > 3600 * 1000) 表.delete(k);
+  if (表.size > 3000) 表.clear();
+}
+function 命中限频(表, 键, 上限, 窗口ms) {
+  const now = Date.now();
+  const r = 表.get(键);
+  if (!r || now - r.起 > 窗口ms) { 表.set(键, { 起: now, 数: 1 }); 清理限流表(表); return false; }
+  r.数 += 1;
+  return r.数 > 上限;
+}
+function 查登录锁(键) {
+  const r = 登录失败表.get(键);
+  if (!r) return 0;
+  const now = Date.now();
+  if (r.锁到 > now) return r.锁到 - now;
+  if (now - r.首次 > 登录失败窗口) 登录失败表.delete(键);
+  return 0;
+}
+function 记登录失败(键) {
+  const now = Date.now();
+  let r = 登录失败表.get(键);
+  if (!r || now - r.首次 > 登录失败窗口) { r = { 首次: now, 次数: 0, 锁到: 0 }; 登录失败表.set(键, r); 清理限流表(登录失败表); }
+  r.次数 += 1;
+  if (r.次数 >= 登录失败上限) { r.锁到 = now + 登录冷却; r.次数 = 0; r.首次 = now; }
+}
 app.post('/api/login', async (req, res) => {
-  if (登录校验并发 >= 2) return res.status(429).json({ 错误: '登录请求过于频繁，请稍后再试' });
-  登录校验并发++;
-  try {
-    const { 用户名, 密码, turnstileToken } = req.body || {};
-    // 若已配置 Cloudflare Turnstile（SiteKey 与 SecretKey 均非空），先验人机令牌再验密码
-    const s = (读数据() || {}).settings || {};
-    const tsSite = String(s.TurnstileSiteKey || '').trim();
-    const tsSecret = String(s.TurnstileSecretKey || '').trim();
-    if (tsSite && tsSecret) {
-      const token = String(turnstileToken || '').trim();
-      if (!token) return res.status(400).json({ 错误: '请先完成人机验证' });
-      try {
-        const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ secret: tsSecret, response: token }),
-          signal: AbortSignal.timeout(8000),
-        }).then(r => r.json());
-        if (!vr || vr.success !== true) {
-          return res.status(403).json({ 错误: '人机验证未通过，请重试' });
-        }
-      } catch (e) {
-        return res.status(503).json({ 错误: '人机验证服务连接超时，请稍后再试' });
-      }
-    }
-    const 凭据 = 读凭据();
-    if (校验凭据(String(用户名 || '').trim(), String(密码 || ''))) {
-      写登录Cookie(res, req, 签发会话Token(凭据));
-      return res.json({ ok: true, 用户名: 凭据.用户名 });
-    }
-    await new Promise(r => setTimeout(r, 2000));
-    return res.status(401).json({ 错误: '用户名或密码错误' });
-  } finally {
-    登录校验并发--;
+  const ip = 取客户端IP(req);
+  const 来源键 = 登录来源键(req, ip);
+  const 尝试用户 = String((req.body && req.body.用户名) || '').trim();
+  const 锁剩余 = 查登录锁(来源键);
+  if (锁剩余 > 0) {
+    记系统错误('login', `登录被限流：连续输错过多 (IP:${ip}, 尝试用户:${尝试用户 || '—'})`, 'POST /api/login');
+    return res.status(429).json({ 错误: `输错次数过多，请 ${Math.ceil(锁剩余 / 60000)} 分钟后再试` });
   }
+  const { 用户名, 密码, turnstileToken } = req.body || {};
+  // 若已配置 Cloudflare Turnstile（SiteKey 与 SecretKey 均非空），先验人机令牌再验密码
+  const tsCfg = 读Turnstile配置(安全读数据());
+  if (tsCfg.siteKey && tsCfg.secretKey) {
+    const token = String(turnstileToken || '').trim();
+    if (!token) {
+      记系统错误('turnstile', `缺少 turnstileToken (IP:${ip}, 尝试用户:${尝试用户 || '—'})`, 'POST /api/login');
+      return res.status(400).json({ 错误: '请先完成人机验证' });
+    }
+    if (登录校验并发 >= 10) return res.status(429).json({ 错误: '登录请求过于频繁，请稍后再试' });
+    let vr = null, 验证异常 = null;
+    登录校验并发++;
+    try {
+      vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ secret: tsCfg.secretKey, response: token }),
+        signal: AbortSignal.timeout(8000),
+      }).then(r => r.json());
+    } catch (e) { 验证异常 = e; } finally { 登录校验并发--; }
+    if (验证异常) {
+      记系统错误('turnstile', 验证异常, 'POST /api/login');
+      return res.status(503).json({ 错误: '人机验证服务连接超时，请稍后再试' });
+    }
+    if (!vr || vr.success !== true) {
+      const codes = Array.isArray(vr && vr['error-codes']) ? vr['error-codes'].join(',') : 'unknown';
+      记系统错误('turnstile', `siteverify 未通过 error-codes:${codes} (IP:${ip}, host:${vr && vr.hostname || '—'})`, 'POST /api/login');
+      return res.status(403).json({ 错误: '人机验证未通过，请重试' });
+    }
+  }
+  const 凭据 = 读凭据();
+  if (校验凭据(String(用户名 || '').trim(), String(密码 || ''))) {
+    登录失败表.delete(来源键);
+    写登录Cookie(res, req, 签发会话Token(凭据));
+    return res.json({ ok: true, 用户名: 凭据.用户名 });
+  }
+  记登录失败(来源键);
+  记系统错误('login', `用户名或密码错误 (IP:${ip}, 尝试用户:${尝试用户 || '—'})`, 'POST /api/login');
+  await new Promise(r => setTimeout(r, 2000));
+  return res.status(401).json({ 错误: '用户名或密码错误' });
 });
 
 // 退出登录
@@ -306,11 +368,23 @@ const 允许背景类型 = {
   'video/mp4': { ext: '.mp4', kind: 'video' },
   'video/webm': { ext: '.webm', kind: 'video' },
 };
-function 查当前背景() {
+function 背景前缀(target) {
+  if (target === 'mobile') return 'bg-mobile';
+  if (target === 'logo') return 'bg-logo';
+  return 'bg';
+}
+function 解析背景目标(req) {
+  const t = req && req.query && req.query.target;
+  if (t === 'mobile') return 'mobile';
+  if (t === 'logo') return 'logo';
+  return 'desktop';
+}
+function 查当前背景(target = 'desktop') {
   try {
     if (!fs.existsSync(登录背景目录)) return null;
+    const 前缀 = 背景前缀(target);
     for (const [mime, info] of Object.entries(允许背景类型)) {
-      const p = path.join(登录背景目录, 'bg' + info.ext);
+      const p = path.join(登录背景目录, 前缀 + info.ext);
       if (fs.existsSync(p)) return { path: p, mime, kind: info.kind, ext: info.ext };
     }
   } catch (e) {}
@@ -327,13 +401,26 @@ function 校验文件魔数(buf, mime) {
   return false;
 }
 app.get('/api/login-bg/meta', (req, res) => {
-  const bg = 查当前背景();
+  const bg = 查当前背景('desktop');
+  const mbg = 查当前背景('mobile');
+  const lbg = 查当前背景('logo');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  if (!bg) return res.json({ hasBg: false });
-  res.json({ hasBg: true, kind: bg.kind, mime: bg.mime });
+  res.json({
+    hasBg: Boolean(bg),
+    kind: bg ? bg.kind : '',
+    mime: bg ? bg.mime : '',
+    mobileHasBg: Boolean(mbg),
+    mobileKind: mbg ? mbg.kind : '',
+    mobileMime: mbg ? mbg.mime : '',
+    logoHasBg: Boolean(lbg),
+    logoMime: lbg ? lbg.mime : ''
+  });
 });
 app.get('/api/login-bg', (req, res) => {
-  const bg = 查当前背景();
+  const target = 解析背景目标(req);
+  const bg = target === 'mobile'
+    ? (查当前背景('mobile') || 查当前背景('desktop'))
+    : 查当前背景(target);
   if (!bg) return res.status(404).end();
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.type(bg.mime);
@@ -348,17 +435,32 @@ app.get('/style.css', (req, res) => {
 app.get('/api/site-info', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   try {
-    const s = (读数据() || {}).settings || {};
-    const tsSite = String(s.TurnstileSiteKey || '').trim();
-    const tsSecret = String(s.TurnstileSecretKey || '').trim();
+    const data = 读数据() || {};
+    const s = data.settings || {};
+    const tsCfg = 读Turnstile配置(data);
     res.json({
       ICP备案: String(s.ICP备案 || '').trim(),
       公安备案: String(s.公安备案 || '').trim(),
-      turnstileSiteKey: (tsSite && tsSecret) ? tsSite : ''
+      turnstileSiteKey: (tsCfg.siteKey && tsCfg.secretKey) ? tsCfg.siteKey : ''
     });
   } catch (e) {
     res.json({ ICP备案: '', 公安备案: '', turnstileSiteKey: '' });
   }
+});
+// 登录页 Turnstile 前端诊断上报（公开路由，只记加载失败/超时/error-callback，限长防刷）
+const 诊断频次表 = new Map();
+app.post('/api/login/turnstile-diag', (req, res) => {
+  // 只在启用了人机验证时记录，且同一来源 5 分钟最多 6 条，防止被人刷满报错日志
+  const tsCfg = 读Turnstile配置(安全读数据());
+  if (!(tsCfg.siteKey && tsCfg.secretKey)) return res.json({ ok: true });
+  if (命中限频(诊断频次表, 登录来源键(req, 取客户端IP(req)), 6, 5 * 60 * 1000)) return res.json({ ok: true });
+  const b = req.body || {};
+  const ip = 取客户端IP(req);
+  const 原因 = String(b.原因 || 'unknown').slice(0, 80);
+  const 详情 = String(b.详情 || '').slice(0, 260);
+  const ua = String(req.headers['user-agent'] || '').slice(0, 120);
+  记系统错误('turnstile-fe', `${原因}${详情 ? ' | ' + 详情 : ''} (IP:${ip}, UA:${ua})`, 'GET /login');
+  res.json({ ok: true });
 });
 
 // 全局鉴权拦截：除上述登录/登出/登录背景只读路由外，所有页面与 /api/* 必须先登录
@@ -368,34 +470,39 @@ app.use((req, res, next) => {
   return res.redirect('/login');
 });
 
-// 上传/删除自定义登录背景（仅已登录用户可用，限 20MB 且校验真实文件头）
+// 上传/删除自定义登录背景（仅已登录用户可用，限 20MB 且校验真实文件头，支持 ?target=mobile|logo）
 app.post('/api/login-bg', express.raw({ type: ['image/*', 'video/*'], limit: '20mb' }), (req, res) => {
+  const target端 = 解析背景目标(req);
+  const 前缀 = 背景前缀(target端);
   const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
   const info = 允许背景类型[mime];
   if (!info) return res.status(400).json({ 错误: '仅支持 JPG、PNG、WebP、GIF 图片或 MP4、WebM 短视频' });
+  if (target端 === 'logo' && info.kind !== 'image') return res.status(400).json({ 错误: '标题图仅支持 PNG、WebP、JPG、GIF 图片' });
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ 错误: '文件为空' });
   if (!校验文件魔数(req.body, mime)) return res.status(400).json({ 错误: '文件内容与格式不匹配，上传被拒绝' });
   fs.mkdirSync(登录背景目录, { recursive: true });
   for (const x of Object.values(允许背景类型)) {
-    const old = path.join(登录背景目录, 'bg' + x.ext);
+    const old = path.join(登录背景目录, 前缀 + x.ext);
     if (fs.existsSync(old)) fs.unlinkSync(old);
   }
-  const target = path.join(登录背景目录, 'bg' + info.ext);
+  const target = path.join(登录背景目录, 前缀 + info.ext);
   const tmp = target + '.tmp';
   fs.writeFileSync(tmp, req.body);
   fs.renameSync(tmp, target);
-  res.json({ ok: true, kind: info.kind, mime });
+  res.json({ ok: true, target: target端, kind: info.kind, mime });
 });
 app.delete('/api/login-bg', (req, res) => {
+  const target端 = 解析背景目标(req);
+  const 前缀 = 背景前缀(target端);
   try {
     if (fs.existsSync(登录背景目录)) {
       for (const x of Object.values(允许背景类型)) {
-        const old = path.join(登录背景目录, 'bg' + x.ext);
+        const old = path.join(登录背景目录, 前缀 + x.ext);
         if (fs.existsSync(old)) fs.unlinkSync(old);
       }
     }
   } catch (e) {}
-  res.json({ ok: true });
+  res.json({ ok: true, target: target端 });
 });
 // -----------密码---------
 
@@ -425,7 +532,85 @@ app.use(express.static(path.join(__dirname, 'public'), {
 function 当前月份() { return 北京日期().slice(0, 7); }
 // 工资分段默认值：2024-03 起每月 4000（与历史口径一致，改动只影响之后新增的分段）
 function 默认工资分段() { return [{ 起始月份: '2024-03', 金额: 4000 }]; }
-function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段(), 钟点房默认价: 60, 空置脏房: [] }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 预缴记录: [], 月度快照: [], 备忘录: [], 日租房态: [], 日租清洁记录: [] }; }
+function 空数据() { return { settings: { 水价: 5, 电价: 1.3, 当前月份: 当前月份(), 隐藏房号: [], 工资分段: 默认工资分段(), 钟点房默认价: 60, 空置脏房: [] }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 预缴记录: [], 月度快照: [], 备忘录: [], 日租房态: [], 日租清洁记录: [], 日租预订: [], 操作日志: [] }; }
+
+// Turnstile 配置读取：服务端环境变量优先（TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY），其次读数据文件
+function 读Turnstile配置(data) {
+  const s = (data && data.settings) || {};
+  const envSite = String(process.env.TURNSTILE_SITE_KEY || '').trim();
+  const envSecret = String(process.env.TURNSTILE_SECRET_KEY || '').trim();
+  const setSite = String(s.TurnstileSiteKey || '').trim();
+  const setSecret = String(s.TurnstileSecretKey || '').trim();
+  return {
+    siteKey: envSite || setSite,
+    secretKey: envSecret || setSecret,
+    siteSource: envSite ? 'env' : (setSite ? 'settings' : ''),
+    secretSource: envSecret ? 'env' : (setSecret ? 'settings' : ''),
+  };
+}
+function 脱敏设置(settings, data) {
+  const out = Object.assign({}, settings || {});
+  delete out.TurnstileSecretKey;
+  const cfg = 读Turnstile配置(data || { settings });
+  out.TurnstileSiteKey = cfg.siteKey;
+  out.TurnstileSecret已配置 = Boolean(cfg.secretKey);
+  out.TurnstileSite来源 = cfg.siteSource;
+  out.TurnstileSecret来源 = cfg.secretSource;
+  return out;
+}
+const 错误日志文件 = path.join(数据目录, 'error-logs.json');
+function 读错误日志() {
+  try {
+    if (!fs.existsSync(错误日志文件)) return [];
+    const arr = JSON.parse(fs.readFileSync(错误日志文件, 'utf8'));
+    return Array.isArray(arr) ? arr.slice(0, 100) : [];
+  } catch (e) { return []; }
+}
+function 写错误日志(arr) {
+  try {
+    if (!fs.existsSync(数据目录)) fs.mkdirSync(数据目录, { recursive: true });
+    const tmp = 错误日志文件 + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(arr, null, 2), 'utf8');
+    fs.renameSync(tmp, 错误日志文件);
+  } catch (e) {}
+}
+const 系统错误日志 = 读错误日志();
+function 记系统错误(来源, err, 路由) {
+  const b = 北京();
+  const 时间 = `${北京日期()} ${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}:${补零(b.getUTCSeconds())}`;
+  const 信息 = err && err.message ? String(err.message) : String(err || '未知错误');
+  const 堆栈 = err && err.stack ? String(err.stack).split('\n').slice(0, 4).join('\n') : '';
+  const 同类 = x => `${x.来源 || ''}|${x.路由 || ''}|${String(x.信息 || '').split(' (IP:')[0]}`;
+  const 新 = { id: Date.now() + Math.floor(Math.random() * 1000), 时间, 首次时间: 时间, 次数: 1, 来源: 来源 || 'server', 路由: 路由 || '', 信息, 堆栈 };
+  // 同一问题反复出现时合并成一条（次数 +1、时间刷新），避免 100 条缓冲被同一个报错占满
+  const 旧下标 = 系统错误日志.findIndex(x => 同类(x) === 同类(新));
+  if (旧下标 >= 0) {
+    const 旧 = 系统错误日志.splice(旧下标, 1)[0];
+    新.首次时间 = 旧.首次时间 || 旧.时间 || 时间;
+    新.次数 = (Number(旧.次数) || 1) + 1;
+    if (!新.堆栈) 新.堆栈 = 旧.堆栈 || '';
+  }
+  系统错误日志.unshift(新);
+  if (系统错误日志.length > 100) 系统错误日志.length = 100;
+  写错误日志(系统错误日志);
+}
+function 记操作日志(data, 操作人, 动作, 对象, 详情) {
+  if (!Array.isArray(data.操作日志)) data.操作日志 = [];
+  const b = 北京();
+  const 时间 = `${北京日期()} ${补零(b.getUTCHours())}:${补零(b.getUTCMinutes())}:${补零(b.getUTCSeconds())}`;
+  data.操作日志.unshift({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    时间,
+    操作人: 操作人 || '管理员',
+    动作,
+    对象: 对象 || '',
+    详情: 详情 || ''
+  });
+  if (data.操作日志.length > 300) data.操作日志.length = 300;
+}
+function 当前操作人() {
+  try { return (读凭据() || {}).用户名 || '管理员'; } catch (e) { return '管理员'; }
+}
 // 某月工资 = 起始月份 ≤ 该月 的分段里，起始月份最大的那条；都不满足则 0；未来月份（没到当月）不发工资
 function 月工资(settings, 月份) {
   if (String(月份) > 当前月份()) return 0;
@@ -472,6 +657,8 @@ function 迁移(data) {
   // 日租房态：一间日租房一条，记「当前」住着谁 / 是不是脏房。daily 仍是账单唯一来源，这里只管房间状态
   if (!Array.isArray(data.日租房态)) data.日租房态 = [];
   if (!Array.isArray(data.日租清洁记录)) data.日租清洁记录 = [];
+  if (!Array.isArray(data.日租预订)) data.日租预订 = [];
+  if (!Array.isArray(data.操作日志)) data.操作日志 = [];
   // 工资分段：老数据没有这个字段时补默认，保证历史 41 个月的工资/净利润与改造前完全一致
   if (!Array.isArray(data.settings.工资分段) || !data.settings.工资分段.length) data.settings.工资分段 = 默认工资分段();
   if (!data.退房记录) data.退房记录 = [];
@@ -518,10 +705,32 @@ function 迁移(data) {
   }
   return data;
 }
+// 数据文件保护：解析失败（损坏/写了一半）时不再"当成空库继续跑"——那样下一次保存会用空库覆盖掉原文件。
+// 现在的做法：把坏文件原样改名保留，暂停所有读写并给出恢复指引，直到用「导入备份」恢复为止。
+let 数据损坏提示 = '';
+let 数据缓存 = { mtime: 0, size: -1, 文本: '', 时间: 0 };   // 文件没变化时直接复用，省掉重复读盘与迁移
+function 安全读数据() { try { return 读数据(); } catch (e) { return { settings: {} }; } }
+function 隔离损坏数据文件(原因) {
+  const b = 北京();
+  const 戳 = `${b.getUTCFullYear()}${补零(b.getUTCMonth() + 1)}${补零(b.getUTCDate())}_${补零(b.getUTCHours())}${补零(b.getUTCMinutes())}${补零(b.getUTCSeconds())}`;
+  const 目标 = `${数据文件}.损坏-${戳}`;
+  try { fs.renameSync(数据文件, 目标); } catch (e) {}
+  数据缓存 = { mtime: 0, size: -1, 文本: '', 时间: 0 };
+  数据损坏提示 = `数据文件读取失败（${原因}），已原样保留为「${path.basename(目标)}」，为避免用空数据覆盖，已暂停所有读写。请在「设置 → 关于 → 导入数据备份」导入最近一份备份（data/备份/daily 里最新的 json），或联系维护人修复该文件。`;
+  记系统错误('data-corrupt', 数据损坏提示, '数据文件');
+}
 function 读数据() {
+  if (数据损坏提示) throw new Error(数据损坏提示);
+  let st = null;
   try {
     if (!fs.existsSync(数据文件)) { const 初始 = 空数据(); fs.mkdirSync(数据目录, { recursive: true }); fs.writeFileSync(数据文件, JSON.stringify(初始, null, 2), 'utf8'); return 初始; }
-    const 原始 = JSON.parse(fs.readFileSync(数据文件, 'utf8'));
+    st = fs.statSync(数据文件);
+    if (数据缓存.文本 && 数据缓存.mtime === st.mtimeMs && 数据缓存.size === st.size && Date.now() - 数据缓存.时间 < 60000) {
+      return JSON.parse(数据缓存.文本);
+    }
+    let 原始;
+    try { 原始 = JSON.parse(fs.readFileSync(数据文件, 'utf8')); }
+    catch (e) { 隔离损坏数据文件(e.message); throw new Error(数据损坏提示); }
     // 防护：数据文件若被误写成「完整备份」外壳（顶层是 类型/数据 字段），自动拆出「数据」部分，避免读成空
     const 是外壳 = 原始 && 原始.类型 === '租房管家完整备份' && 原始.数据 && typeof 原始.数据 === 'object';
     const 有效 = 是外壳 ? 原始.数据 : 原始;
@@ -537,8 +746,14 @@ function 读数据() {
     const 补了快照 = 补快照(data);
     // 首次迁移（磁盘还没有房源表）或拆出了外壳时，立即写回纯数据、持久化
     if (需写回 || 是外壳 || 补了快照) 写数据(data);
+    else if (st) 数据缓存 = { mtime: st.mtimeMs, size: st.size, 文本: JSON.stringify(data), 时间: Date.now() };
     return data;
-  } catch (e) { console.error('读取数据失败：', e.message); return 空数据(); }
+  } catch (e) {
+    if (数据损坏提示) throw e;
+    console.error('读取数据失败：', e.message);
+    记系统错误('data-read', e, '读数据');
+    throw new Error('读取数据失败：' + e.message);
+  }
 }
 // 每日自动滚动备份（data/备份/daily/YYYY-MM-DD_HHmm.json，保留最近 7 天）
 // 与 /api/export 同构（「租房管家完整备份」格式），需要恢复时可直接走前端「导入备份」一键还原。
@@ -587,8 +802,14 @@ function 每日自动备份(当前数据, 保留天数 = 7) {
 
 function 写数据(data) {
   const 临时 = 数据文件 + '.tmp';
-  fs.writeFileSync(临时, JSON.stringify(data, null, 2), 'utf8');
+  const 文本 = JSON.stringify(data, null, 2);
+  fs.writeFileSync(临时, 文本, 'utf8');
   fs.renameSync(临时, 数据文件);
+  数据损坏提示 = '';   // 成功写入（含「导入备份」恢复）= 解除损坏保护
+  try {
+    const st = fs.statSync(数据文件);
+    数据缓存 = { mtime: st.mtimeMs, size: st.size, 文本, 时间: Date.now() };
+  } catch (e) { 数据缓存 = { mtime: 0, size: -1, 文本: '', 时间: 0 }; }
   每日自动备份(data);
 }
 
@@ -834,7 +1055,10 @@ function 补快照(data) {
 }
 
 // ============ API ============
-app.get('/api/all', (req, res) => res.json(读数据()));
+app.get('/api/all', (req, res) => {
+  const data = 读数据();
+  res.json(Object.assign({}, data, { settings: 脱敏设置(data.settings, data) }));
+});
 app.post('/api/settings', (req, res) => {
   const data = 读数据();
   const 补丁 = Object.assign({}, req.body);
@@ -859,9 +1083,49 @@ app.post('/api/settings', (req, res) => {
   if ('ICP备案' in 补丁) 补丁.ICP备案 = String(补丁.ICP备案 || '').trim();
   if ('公安备案' in 补丁) 补丁.公安备案 = String(补丁.公安备案 || '').trim();
   if ('TurnstileSiteKey' in 补丁) 补丁.TurnstileSiteKey = String(补丁.TurnstileSiteKey || '').trim();
-  if ('TurnstileSecretKey' in 补丁) 补丁.TurnstileSecretKey = String(补丁.TurnstileSecretKey || '').trim();
+  if ('TurnstileSecretKey' in 补丁) {
+    if (补丁.TurnstileSecretKey === undefined) delete 补丁.TurnstileSecretKey;
+    else 补丁.TurnstileSecretKey = String(补丁.TurnstileSecretKey || '').trim();
+  }
+  const 变更项 = Object.keys(补丁).map(k => k === 'TurnstileSecretKey' ? 'TurnstileSecretKey(已更新)' : k);
   Object.assign(data.settings, 补丁);
-  写数据(data); res.json(data.settings);
+  记操作日志(data, 当前操作人(), '修改系统设置', 变更项.join('、'), '');
+  写数据(data);
+  res.json(脱敏设置(data.settings, data));
+});
+
+// 按需读取 Turnstile Secret Key（仅已登录管理员使用；若来自环境变量则不回传明文）
+app.get('/api/settings/turnstile-secret', (req, res) => {
+  const data = 读数据();
+  const cfg = 读Turnstile配置(data);
+  if (cfg.secretSource === 'env') {
+    return res.json({ source: 'env', secretKey: '' });
+  }
+  return res.json({ source: cfg.secretSource, secretKey: cfg.secretKey });
+});
+
+// 测试 Cloudflare Turnstile Secret Key 连通性与有效性
+app.post('/api/settings/turnstile-test', async (req, res) => {
+  const 传入 = String((req.body && req.body.secretKey) || '').trim();
+  const cfg = 读Turnstile配置(读数据());
+  const secretKey = 传入 || cfg.secretKey;
+  if (!secretKey) return res.status(400).json({ ok: false, 错误: '未配置 Turnstile Secret Key，无法测试' });
+  try {
+    const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: secretKey, response: '__turnstile_connectivity_test__' }),
+      signal: AbortSignal.timeout(8000),
+    }).then(r => r.json());
+    const codes = Array.isArray(vr && vr['error-codes']) ? vr['error-codes'] : [];
+    if (codes.includes('invalid-input-secret')) {
+      return res.json({ ok: false, 可达: true, 错误: '已连通 Cloudflare，但 Secret Key 无效（invalid-input-secret）' });
+    }
+    return res.json({ ok: true, 可达: true, 消息: 'Cloudflare Turnstile 接口连通正常，Secret Key 有效' });
+  } catch (e) {
+    记系统错误('turnstile-test', e, 'POST /api/settings/turnstile-test');
+    return res.status(502).json({ ok: false, 可达: false, 错误: '无法连接 Cloudflare Turnstile：' + e.message });
+  }
 });
 
 // 登录账号：只回用户名，绝不返回哈希/盐
@@ -878,6 +1142,9 @@ app.post('/api/password', (req, res) => {
   // 前端已比对过两次输入，这里再兜一次，防止绕过页面直接调接口打错密码把自己锁在外面
   if (确认密码 != null && String(确认密码) !== 密码) return res.status(400).json({ 错误: '两次输入的新密码不一致' });
   写凭据(造凭据(用户名, 密码));
+  const data = 读数据();
+  记操作日志(data, 凭据.用户名, '修改登录密码', 用户名, '账号或密码已更新');
+  写数据(data);
   清登录Cookie(res, req);
   res.json({ ok: true, 用户名 });
 });
@@ -943,6 +1210,7 @@ app.post('/api/rooms', (req, res) => {
   if (房.入住日 && ((房.水表底度 !== '' && 房.水表底度 != null) || (房.电表底度 !== '' && 房.电表底度 != null))) {
     data.meters.push({ id: 新id(data.meters), 日期: 房.入住日, 房号, 水表: 房.水表底度 || null, 电表: 房.电表底度 || null });
   }
+  记操作日志(data, 当前操作人(), '月租入住', `${房号} (${房.租客姓名 || '—'})`, `月租 ¥${房.月租金 || 0}`);
   写数据(data); res.json(房);
 });
 app.put('/api/rooms/:id', (req, res) => {
@@ -960,6 +1228,7 @@ app.put('/api/rooms/:id', (req, res) => {
   }
   记预缴(data, data.rooms[i].房号, 追加月, req.body.预缴金, req.body.管理费预缴金, '编辑时补录');
   delete data.rooms[i].预缴金; delete data.rooms[i].管理费预缴金; delete data.rooms[i].预缴月份;
+  记操作日志(data, 当前操作人(), '修改房间档案', `${data.rooms[i].房号} (${data.rooms[i].租客姓名 || '—'})`, '');
   写数据(data);
   记客人(data.rooms[i].租客姓名, data.rooms[i].身份证, data.rooms[i].电话, '', 档案id);   // 编辑时补填的也存档
   res.json(data.rooms[i]);
@@ -969,7 +1238,9 @@ app.delete('/api/rooms/:id', (req, res) => {
   const data = 读数据(); const 房 = data.rooms.find(r => r.id == req.params.id);
   if (!房) return res.status(404).json({ 错误: '房间不存在' });
   if (租客存在(房)) return res.status(400).json({ 错误: '该房有租客，请先退房或换房' });
-  data.rooms = data.rooms.filter(r => r.id != req.params.id); 写数据(data); res.json({ ok: true });
+  data.rooms = data.rooms.filter(r => r.id != req.params.id);
+  记操作日志(data, 当前操作人(), '删除房间档案', 房.房号, '');
+  写数据(data); res.json({ ok: true });
 });
 
 // 房源信息：楼里全部房号清单（设置页维护）
@@ -979,19 +1250,25 @@ app.post('/api/houses', (req, res) => {
   if (!房号) return res.status(400).json({ 错误: '请填房号' });
   if (data.房源.some(h => h.房号 === 房号)) return res.status(400).json({ 错误: `房号「${房号}」已存在` });
   const 房源 = { id: 新id(data.房源), 房号, 房型: req.body.房型 === '日租' ? '日租' : '月租' };
-  data.房源.push(房源); 写数据(data); res.json(房源);
+  data.房源.push(房源);
+  记操作日志(data, 当前操作人(), '新增房源', 房号, `房型:${房源.房型}`);
+  写数据(data); res.json(房源);
 });
 // 修改房源（如切换房型月租/日租）
 app.put('/api/houses/:id', (req, res) => {
   const data = 读数据(); const i = data.房源.findIndex(h => h.id == req.params.id);
   if (i < 0) return res.status(404).json({ 错误: '房源不存在' });
-  data.房源[i] = { ...data.房源[i], ...req.body, id: data.房源[i].id }; 写数据(data); res.json(data.房源[i]);
+  data.房源[i] = { ...data.房源[i], ...req.body, id: data.房源[i].id };
+  记操作日志(data, 当前操作人(), '修改房源', data.房源[i].房号, `房型:${data.房源[i].房型 || '月租'}`);
+  写数据(data); res.json(data.房源[i]);
 });
 app.delete('/api/houses/:id', (req, res) => {
   const data = 读数据(); const 源 = data.房源.find(h => h.id == req.params.id);
   if (!源) return res.status(404).json({ 错误: '房源不存在' });
   if (data.rooms.some(r => r.房号 === 源.房号)) return res.status(400).json({ 错误: `房号「${源.房号}」正在出租，请先退房` });
-  data.房源 = data.房源.filter(h => h.id != req.params.id); 写数据(data); res.json({ ok: true });
+  data.房源 = data.房源.filter(h => h.id != req.params.id);
+  记操作日志(data, 当前操作人(), '删除房源', 源.房号, '');
+  写数据(data); res.json({ ok: true });
 });
 
 // ============ 预缴 API ============
@@ -1076,6 +1353,7 @@ app.post('/api/checkout', (req, res) => {
   }
   // 退房后从 rooms 移除该房，房号留在房源表 → 自动变空置
   data.rooms = data.rooms.filter(r => r.房号 !== 房号);
+  记操作日志(data, 当前操作人(), '月租退房', `${房号} (${记录.租客 || '—'})`, `退房日期:${记录.日期}，实退 ¥${退入金额}`);
   写数据(data);
   res.json(记录);
 });
@@ -1133,6 +1411,7 @@ app.post('/api/checkouts/undo/:id', (req, res) => {
   data.rooms.push(记录.房间快照); // 恢复房间为在租
   if (记录.流水id) data.transactions = data.transactions.filter(t => t.id !== 记录.流水id); // 删退还流水
   data.退房记录 = data.退房记录.filter(r => r.id != req.params.id);
+  记操作日志(data, 当前操作人(), '撤销月租退房', `${记录.房号} (${记录.租客 || '—'})`, `原退房日:${记录.日期}`);
   写数据(data);
   res.json({ ok: true, 房号: 记录.房号 });
 });
@@ -1140,7 +1419,9 @@ app.delete('/api/checkouts/:id', (req, res) => {
   const data = 读数据();
   const 记录 = data.退房记录.find(r => r.id == req.params.id);
   if (记录 && 月份已锁定(data, 记录.日期)) return res.status(400).json({ 错误: '该退房记录所在月已锁定，如需修改请先在设置里解锁' });
-  data.退房记录 = data.退房记录.filter(r => r.id != req.params.id); 写数据(data); res.json({ ok: true });
+  data.退房记录 = data.退房记录.filter(r => r.id != req.params.id);
+  if (记录) 记操作日志(data, 当前操作人(), '删除退房记录', `${记录.房号} (${记录.租客 || '—'})`, `退房日:${记录.日期}`);
+  写数据(data); res.json({ ok: true });
 });
 
 // 抄表
@@ -1238,11 +1519,12 @@ app.post('/api/bills/collect', (req, res) => {
   let 记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
   if (!记录) { 记录 = { id: 新id(data.bills), 房号, 月份, 房间损耗: 0, 损耗说明: '', 实收: 0, 强制: false, 平账: false, 收款日期: '' }; data.bills.push(记录); }
   if (实收 !== undefined) 记录.实收 = Number(实收) || 0;
-  if (强制 !== undefined) 记录.强制 = 强制 === true;
+  if (强制 !== undefined) 记录.强制 =强制 === true;
   if (平账 !== undefined) 记录.平账 = 平账 === true;
   if (房间损耗 !== undefined) 记录.房间损耗 = Number(房间损耗) || 0;
   if (损耗说明 !== undefined) 记录.损耗说明 = 损耗说明 || '';
   if (收款日期 !== undefined) 记录.收款日期 = 收款日期;
+  记操作日志(data, 当前操作人(), '修改账单', `${房号} (${月份})`, `实收:${记录.实收}${记录.平账 ? ' 平账' : ''}${记录.强制 ? ' 强制已核收' : ''}${记录.房间损耗 ? ` 损耗:${记录.房间损耗}` : ''}`);
   写数据(data); res.json(记录);
 });
 // 追缴：手动输入金额，累加到本月账单「补缴」字段（不改变状态、不碰历史月）
@@ -1256,6 +1538,7 @@ app.post('/api/bills/arrears', (req, res) => {
   if (!本月) { 本月 = { id: 新id(data.bills), 房号, 月份, 房间损耗: 0, 损耗说明: '', 实收: 0, 强制: false, 平账: false, 收款日期: '', 补缴: 0 }; data.bills.push(本月); }
   if (!('补缴' in 本月)) 本月.补缴 = 0;
   本月.补缴 = 舍入((本月.补缴 || 0) + 补缴金额);
+  记操作日志(data, 当前操作人(), '账单追缴', `${房号} (${月份})`, `追缴 ¥${补缴金额}，累计补缴 ¥${本月.补缴}`);
   写数据(data);
   res.json({ 房号, 月份, 补缴: 本月.补缴 });
 });
@@ -1283,6 +1566,7 @@ app.post('/api/bills/carry', (req, res) => {
   if (!下月记录) { 下月记录 = { id: 新id(data.bills), 房号, 月份: 下月, 房间损耗: 0, 损耗说明: '', 实收: 0, 强制: false, 平账: false, 收款日期: '', 补缴: 0, 结转: 0, 转下月: 0 }; data.bills.push(下月记录); }
   if (!('结转' in 下月记录)) 下月记录.结转 = 0;
   下月记录.结转 = 舍入((下月记录.结转 || 0) + 结转金额);
+  记操作日志(data, 当前操作人(), '欠费滚存', `${房号} (${月份} → ${下月})`, `滚存金额 ¥${结转金额}`);
   写数据(data);
   res.json({ 房号, 月份, 下月, 结转金额, 结转: 下月记录.结转, 转下月: 本月记录.转下月 });
 });
@@ -1297,6 +1581,7 @@ app.post('/api/bills/sent', (req, res) => {
   // 发送即定格：把这一刻的账单完整内容存成快照，之后追缴/核收不再改写这张单子的显示（月度/总账单仍用实时）
   if (房) 记录.发送快照 = 生成账单(data, 房, 月份);
   记录.已发送 = true;
+  记操作日志(data, 当前操作人(), '发送账单', `${房号} (${月份})`, '');
   写数据(data);
   res.json({ 房号, 月份, 已发送: true });
 });
@@ -1307,6 +1592,7 @@ app.post('/api/bills/unsent', (req, res) => {
   if (月份已锁定(data, 月份)) return res.status(400).json({ 错误: `该月（${String(月份).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
   const 记录 = data.bills.find(b => b.房号 === 房号 && b.月份 === 月份);
   if (记录) { 记录.已发送 = false; delete 记录.发送快照; }
+  记操作日志(data, 当前操作人(), '撤销发送账单', `${房号} (${月份})`, '');
   写数据(data);
   res.json({ 房号, 月份, 已发送: false });
 });
@@ -1483,6 +1769,13 @@ app.post('/api/roomstatus/checkin', (req, res) => {
   if (态.状态 === '脏房') return res.status(400).json({ 错误: `${房号} 还是脏房，请先确认清洁` });
   const 入住日 = String(req.body.入住日 || '').slice(0, 10) || 营业日();   // 凌晨办的入住算前一天
   if (月份已锁定(data, 入住日)) return res.status(400).json({ 错误: `该入住日所在月（${String(入住日).slice(0, 7)}）已锁定，如需修改请先在设置里解锁` });
+  const 预订id校验 = Number(req.body.预订id) || 0;
+  if (预订id校验) {
+    const 订 = (data.日租预订 || []).find(x => x.id === 预订id校验);
+    if (订 && 订.入住日 && 订.入住日 > 营业日()) {
+      return res.status(400).json({ 错误: `未到预订入住日（${订.入住日}），暂不能办理入住` });
+    }
+  }
   const 钟点 = req.body.房型 === '钟点';
   const 时长小时 = 钟点 ? Math.max(0.5, Number(req.body.时长小时) || 3) : 0;   // 钟点房默认 3 小时，可改
   const 天数 = 钟点 ? 1 : Math.max(1, Number(req.body.天数) || 1);            // 钟点房在账单里按 1 个单元记
@@ -1512,6 +1805,12 @@ app.post('/api/roomstatus/checkin', (req, res) => {
   });
   // 每位都存档；备注是整单一个字段，记给第一位客人（自动填充时也只有第一行姓名会带出备注）
   客人们.forEach((g, i) => 记客人(g.姓名, g.身份证, g.电话, i === 0 ? 态.备注 : '', g.档案id));
+  const 预订id = Number(req.body.预订id) || 0;
+  if (预订id) {
+    const 订 = (data.日租预订 || []).find(x => x.id === 预订id);
+    if (订) 订.状态 = 'checkedin';
+  }
+  记操作日志(data, 当前操作人(), '日租入住', `${态.房号} (${态.客人 || '—'})`, `${态.房型} ${态.天数}天 ¥${态.金额}`);
   写数据(data);
   res.json({ ok: true, 房态: 态, 账单, 已入账: !!账单 });
 });
@@ -1559,6 +1858,7 @@ app.post('/api/roomstatus/extend', (req, res) => {
     账单 = null; 态.日租id = null;
     提示 = '房费改成 0，已撤掉那条日租账单';
   }
+  记操作日志(data, 当前操作人(), '日租续住/改价', `${态.房号} (${态.客人 || '—'})`, `${天数}天 ¥${金额}`);
   写数据(data);
   res.json({ ok: true, 房态: 态, 账单, 提示 });
 });
@@ -1568,6 +1868,7 @@ app.post('/api/roomstatus/checkout', (req, res) => {
   const 态 = 取房态(data, String(req.body.房号 || '').trim());
   if (!态 || 态.状态 !== '在住') return res.status(400).json({ 错误: '该房间当前没有在住客人' });
   态.状态 = '脏房'; 态.退房时间 = new Date().toISOString();
+  记操作日志(data, 当前操作人(), '日租退房', `${态.房号} (${态.客人 || '—'})`, '已转脏房');
   写数据(data);
   res.json({ ok: true, 房态: 态 });
 });
@@ -1579,7 +1880,9 @@ app.post('/api/roomstatus/undo-checkin', (req, res) => {
   if (月份已锁定(data, 态.入住日)) return res.status(400).json({ 错误: '该房入住的账单所在月已锁定，如需修改请先在设置里解锁' });
   const 删了 = 态.日租id != null && data.daily.some(d => d.id === 态.日租id);
   if (删了) data.daily = data.daily.filter(d => d.id !== 态.日租id);
+  const 原客 = 态.客人 || '—';
   清空房态(态);
+  记操作日志(data, 当前操作人(), '撤销日租入住', `${态.房号} (${原客})`, 删了 ? '已同步撤销日租账单' : '');
   写数据(data);
   res.json({ ok: true, 删除账单: 删了 });
 });
@@ -1606,6 +1909,100 @@ app.post('/api/roomstatus/clean-all', (req, res) => {
   脏房.forEach(态 => 做清洁(data, 态));
   写数据(data);
   res.json({ ok: true, 数量: 脏房.length, 房号: 脏房.map(x => x.房号) });
+});
+
+// ============ 日租预订（未来房态预约 + 冲突检测 + 一键转入住） ============
+function 预订冲突检查(data, { 房号, 入住日, 离店日, 排除id = 0 }) {
+  const 冲突单 = (data.日租预订 || []).find(b =>
+    b.id !== 排除id &&
+    (b.状态 === 'pending' || b.状态 === 'confirmed') &&
+    b.房号 === 房号 &&
+    入住日 < b.离店日 &&
+    离店日 > b.入住日
+  );
+  if (冲突单) return `${房号} 房在 ${冲突单.入住日} ~ ${冲突单.离店日} 已有${冲突单.状态 === 'confirmed' ? '确认' : '待确认'}预订（${冲突单.客户}），请换房或调整日期`;
+  const 态 = 取房态(data, 房号);
+  if (态 && 态.状态 === '在住' && 态.房型 !== '钟点' && 态.入住日) {
+    const 到期 = 加天(态.入住日, Math.max(1, Number(态.天数) || 1));
+    if (入住日 < 到期 && 离店日 > 态.入住日) {
+      return `${房号} 房当前在住（${态.入住日} ~ ${到期}），日期与在住客冲突`;
+    }
+  }
+  return '';
+}
+app.get('/api/bookings', (req, res) => {
+  const data = 读数据();
+  const 列表 = (data.日租预订 || []).slice().sort((a, b) => String(a.入住日 || '').localeCompare(String(b.入住日 || '')));
+  res.json({ 今日: 营业日(), 列表 });
+});
+app.post('/api/bookings', (req, res) => {
+  const data = 读数据();
+  const 房号 = String(req.body.房号 || '').trim();
+  const 入住日 = String(req.body.入住日 || '').slice(0, 10);
+  const 天数 = Math.max(0, Number(req.body.天数) || 0);
+  const 离店日 = String(req.body.离店日 || '').slice(0, 10) || (入住日 && 天数 > 0 ? 加天(入住日, 天数) : '');
+  const 客人们 = Array.isArray(req.body.客人们) && req.body.客人们.length
+    ? req.body.客人们.map(g => ({ 姓名: String(g.姓名 || '').trim(), 电话: String(g.电话 || '').trim(), 身份证: String(g.身份证 || '').trim() })).filter(g => g.姓名 || g.电话 || g.身份证)
+    : [];
+  const 主客 = 客人们[0] || { 姓名: String(req.body.客户 || '').trim(), 电话: String(req.body.电话 || '').trim(), 身份证: String(req.body.身份证 || '').trim() };
+  const 客户 = String(req.body.客户 || 主客.姓名 || '').trim();
+  const 电话 = String(req.body.电话 || 主客.电话 || '').trim();
+  const 身份证 = String(req.body.身份证 || 主客.身份证 || '').trim();
+  const 渠道 = String(req.body.渠道 || '电话').trim() || '电话';
+  const 人数 = Math.max(1, Number(req.body.人数) || 1);
+  const 金额 = 舍入(Number(req.body.金额) || 0);
+  const 定金 = 舍入(Math.max(0, Number(req.body.定金) || 0));
+  const 备注 = String(req.body.备注 || '').trim();
+  if (!是日租房(data, 房号)) return res.status(400).json({ 错误: '请选择有效的日租房号' });
+  if (!入住日 || !离店日 || 离店日 <= 入住日) return res.status(400).json({ 错误: '预订天数必须至少 1 天' });
+  if (!客户) return res.status(400).json({ 错误: '请填写客户姓名' });
+  if (!电话) return res.status(400).json({ 错误: '请填写联系电话' });
+  if (!(金额 > 0)) return res.status(400).json({ 错误: '预订金额必须大于 0' });
+  const 冲突 = 预订冲突检查(data, { 房号, 入住日, 离店日 });
+  if (冲突) return res.status(400).json({ 错误: 冲突 });
+  const 记录 = {
+    id: 新id(data.日租预订),
+    房号, 客户, 电话, 身份证,
+    客人们: 客人们.length ? 客人们 : [{ 姓名: 客户, 电话, 身份证 }],
+    渠道, 人数, 天数: 天数 || undefined,
+    入住日, 离店日, 金额, 定金,
+    状态: 'pending', 备注,
+    创建时间: new Date().toISOString()
+  };
+  data.日租预订.push(记录);
+  记操作日志(data, 当前操作人(), '新增日租预订', `${房号} (${客户})`, `${入住日} ~ ${离店日} ¥${金额}`);
+  写数据(data);
+  res.json({ ok: true, 记录 });
+});
+app.put('/api/bookings/:id', (req, res) => {
+  const data = 读数据();
+  const id = Number(req.params.id);
+  const 记录 = (data.日租预订 || []).find(x => x.id === id);
+  if (!记录) return res.status(404).json({ 错误: '预订不存在' });
+  const 目标状态 = req.body.状态;
+  if (目标状态 && !['pending', 'confirmed', 'checkedin', 'cancelled'].includes(目标状态)) {
+    return res.status(400).json({ 错误: '无效的预订状态' });
+  }
+  if (目标状态 === 'confirmed') {
+    const 冲突 = 预订冲突检查(data, { 房号: 记录.房号, 入住日: 记录.入住日, 离店日: 记录.离店日, 排除id: id });
+    if (冲突) return res.status(400).json({ 错误: 冲突 });
+  }
+  if (目标状态) 记录.状态 = 目标状态;
+  if (req.body.备注 !== undefined) 记录.备注 = String(req.body.备注 || '').trim();
+  if (req.body.定金 !== undefined) 记录.定金 = 舍入(Math.max(0, Number(req.body.定金) || 0));
+  记操作日志(data, 当前操作人(), '更新日租预订', `${记录.房号} (${记录.客户})`, 目标状态 ? `状态→${目标状态}` : '修改预订信息');
+  写数据(data);
+  res.json({ ok: true, 记录 });
+});
+app.delete('/api/bookings/:id', (req, res) => {
+  const data = 读数据();
+  const id = Number(req.params.id);
+  const 存在 = (data.日租预订 || []).find(x => x.id === id);
+  if (!存在) return res.status(404).json({ 错误: '预订不存在' });
+  data.日租预订 = data.日租预订.filter(x => x.id !== id);
+  记操作日志(data, 当前操作人(), '删除日租预订', `${存在.房号} (${存在.客户})`, `${存在.入住日} ~ ${存在.离店日}`);
+  写数据(data);
+  res.json({ ok: true });
 });
 
 // 收支
@@ -1783,6 +2180,7 @@ app.post('/api/settle', (req, res) => {
     if (欠款房.length) return res.status(400).json({ 错误: '还有房间欠款未处理，请先欠费滚存再切月', 欠款房 });
   }
   const 记录 = 固化月份(data, 月份);
+  记操作日志(data, 当前操作人(), '锁定/固化月份', 月份, '已生成月度快照并锁定');
   写数据(data);
   res.json(记录);
 });
@@ -1793,8 +2191,10 @@ app.post('/api/unlock', (req, res) => {
   if (!月份) return res.status(400).json({ 错误: '缺少月份' });
   const 前 = data.月度快照.length;
   data.月度快照 = data.月度快照.filter(k => k.月份 !== 月份);
+  const 已解锁 = 前 > data.月度快照.length;
+  if (已解锁) 记操作日志(data, 当前操作人(), '解锁月份', 月份, '已解除月度锁定，允许重新编辑');
   写数据(data);
-  res.json({ ok: true, 已解锁: 前 > data.月度快照.length, 月份 });
+  res.json({ ok: true, 已解锁, 月份 });
 });
 
 // 导出完整备份：把 数据.json + 登录凭据.json + 客人档案.json 合并成一个文件（带类型标记，导入时自动拆回三份）
@@ -1817,6 +2217,8 @@ app.get('/api/export', (req, res) => {
     // 文件名用英文（坑 5：HTTP 响应头文件名用中文会报 Invalid character）
     res.setHeader('Content-Disposition', `attachment; filename="rental-full-backup-${时间戳}.json"`);
     res.send(JSON.stringify(备份, null, 2));
+    // 记下这次手动下载时间，前端据此提醒「多久没备份了」
+    try { 数据.settings.上次手动备份 = 备份.导出时间; 写数据(数据); } catch (e) {}
   } catch (e) {
     res.status(500).json({ 错误: '导出失败：' + e.message });
   }
@@ -1833,6 +2235,7 @@ app.post('/api/import', (req, res) => {
         return res.status(400).json({ 错误: '备份里的「数据」不完整，无法导入' });
       }
       迁移(上传.数据);
+      记操作日志(上传.数据, 当前操作人(), '导入数据备份', '完整备份', `rooms:${上传.数据.rooms.length}`);
       写数据(上传.数据);
       if (上传.登录凭据 && typeof 上传.登录凭据 === 'object' && 上传.登录凭据.哈希) {
         const 临时 = 凭据文件 + '.tmp';
@@ -1843,6 +2246,7 @@ app.post('/api/import', (req, res) => {
     } else if (Array.isArray(上传.rooms)) {
       // 旧格式：纯数据.json，只覆盖数据，不动登录凭据和客人档案（向后兼容旧备份）
       迁移(上传);
+      记操作日志(上传, 当前操作人(), '导入数据备份', '兼容数据格式', `rooms:${上传.rooms.length}`);
       写数据(上传);
       res.json({ ok: true, 完整: false });
     } else {
@@ -2132,6 +2536,65 @@ app.get('/api/update/history', (req, res) => {
 });
 // 更新日志：读本地「更新日志.md」，按版本切段回给前端（各版本看日志用）
 app.get('/api/update/changelog', (req, res) => res.json(读更新日志()));
+
+// 审计操作日志 & 系统运行报错日志
+app.get('/api/logs', (req, res) => {
+  // 数据文件损坏时也要能看日志（报错日志不依赖数据文件）
+  let 操作日志 = [];
+  try { const data = 读数据(); 操作日志 = Array.isArray(data.操作日志) ? data.操作日志 : []; } catch (e) {}
+  res.json({ 操作日志, 系统错误日志 });
+});
+app.post('/api/logs/client-error', (req, res) => {
+  const b = req.body || {};
+  const 信息 = String(b.信息 || '前端未知错误').slice(0, 500);
+  const 路由 = String(b.路由 || '').slice(0, 200);
+  const 来源 = String(b.来源 || 'frontend').slice(0, 40);
+  const 堆栈 = String(b.堆栈 || '').slice(0, 600);
+  记系统错误(来源, { message: 信息, stack: 堆栈 }, 路由);
+  res.json({ ok: true });
+});
+app.post('/api/logs/clear-errors', (req, res) => {
+  系统错误日志.length = 0;
+  写错误日志(系统错误日志);
+  res.json({ ok: true });
+});
+app.post('/api/logs/clear-ops', (req, res) => {
+  const data = 读数据();
+  data.操作日志 = [];
+  写数据(data);
+  res.json({ ok: true });
+});
+app.post('/api/logs/clear-all', (req, res) => {
+  const data = 读数据();
+  data.操作日志 = [];
+  写数据(data);
+  系统错误日志.length = 0;
+  写错误日志(系统错误日志);
+  res.json({ ok: true });
+});
+
+// 未匹配的 /api/* 统一返回 JSON 并记入系统错误日志（不再落入 HTML 页面）
+app.use('/api', (req, res) => {
+  const 目标 = `${req.method} ${req.originalUrl}`;
+  记系统错误('api-404', `接口不存在 (${目标})`, 目标);
+  res.status(404).json({ 错误: `接口不存在：${目标}` });
+});
+
+// 全局 Express 异常兜底与未捕获异常记录
+app.use((err, req, res, next) => {
+  记系统错误('express', err, `${req.method} ${req.originalUrl}`);
+  console.error('[Express Error]', req.method, req.originalUrl, err && err.stack || err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({ 错误: (err && err.message) || '服务器内部错误' });
+});
+process.on('unhandledRejection', reason => {
+  记系统错误('unhandledRejection', reason, 'process');
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', err => {
+  记系统错误('uncaughtException', err, 'process');
+  console.error('[uncaughtException]', err);
+});
 
 const 端口 = process.env.PORT || 3000;
 // 在线更新重启时，旧进程可能还没完全释放端口，新进程立刻 listen 会 EADDRINUSE。

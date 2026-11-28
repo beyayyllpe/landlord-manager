@@ -130,12 +130,25 @@ function 按日期排房卡(a, b) {
   return 取房卡日期数(a) - 取房卡日期数(b) || String(a.房号).localeCompare(String(b.房号), 'zh-CN', { numeric: true });
 }
 
+function 取全景副标(c) {
+  if (c.样式类 === '欠费' || c.样式类 === '未交') return c.金额文 || (c.样式类 === '欠费' ? '欠款' : '未交');
+  if (c.样式类 === '空置脏' || c.样式类 === '日租脏房') return '待保洁';
+  if (c.样式类 === '已核收') return '在住';
+  if (c.样式类 === '空置净') return '空房';
+  if (c.样式类 === '自住') return '自住';
+  if (c.样式类 === '日租空闲') return '日租';
+  if (c.样式类 === '日租在住') return (c.日租 && c.日租.客人) ? String(c.日租.客人).trim() : '在住';
+  return c.状态标签 || '—';
+}
+
 function 渲染楼层工作台HTML(卡片列表) {
   const 欠款们 = 卡片列表.filter(x => x.样式类 === '欠费').sort(按日期排房卡);
   const 未交们 = 卡片列表.filter(x => x.样式类 === '未交').sort(按日期排房卡);
   const 待发们 = 卡片列表.filter(x => x.样式类 === '待发').sort(按日期排房卡);
   const 空净们 = 卡片列表.filter(x => x.样式类 === '空置净');
   const 脏房们 = 卡片列表.filter(x => x.样式类 === '空置脏' || x.样式类 === '日租脏房');
+  const 月租们 = 卡片列表.filter(x => x.分类 === '月租');
+  const 日租们 = 卡片列表.filter(x => x.分类 === '日租');
   const 欠款总额 = 欠款们.reduce((s, c) => s + 取房卡金额数(c), 0);
   const 未交总额 = 未交们.reduce((s, c) => s + 取房卡金额数(c), 0);
 
@@ -154,6 +167,8 @@ function 渲染楼层工作台HTML(卡片列表) {
     if (总览筛选集.has('未交') && c.样式类 === '未交') return true;
     if (总览筛选集.has('空房') && c.样式类 === '空置净') return true;
     if (总览筛选集.has('脏房') && (c.样式类 === '空置脏' || c.样式类 === '日租脏房')) return true;
+    if (总览筛选集.has('月租') && c.分类 === '月租') return true;
+    if (总览筛选集.has('日租') && c.分类 === '日租') return true;
     return false;
   };
 
@@ -201,22 +216,30 @@ function 渲染楼层工作台HTML(卡片列表) {
     渲染待处理组('待发单', '蓝', 待发们, 0);
 
   return `
-    <div class="总览指标四格">
-      <button type="button" class="指标小卡${总览筛选集.has('欠款') ? ' 选中' : ''}" onclick="切换总览筛选('欠款')">
+    <div class="总览指标六格">
+      <button type="button" class="指标小卡 红${总览筛选集.has('欠款') ? ' 选中' : ''}" onclick="切换总览筛选('欠款')">
         <div class="指标主"><b class="红"><span class="币">¥</span>${千分位(欠款总额)}</b><span>${欠款们.length} 间</span></div>
         <div class="指标标"><i class="红"></i>欠款</div>
       </button>
-      <button type="button" class="指标小卡${总览筛选集.has('未交') ? ' 选中' : ''}" onclick="切换总览筛选('未交')">
+      <button type="button" class="指标小卡 浅红${总览筛选集.has('未交') ? ' 选中' : ''}" onclick="切换总览筛选('未交')">
         <div class="指标主"><b><span class="币">¥</span>${千分位(未交总额)}</b><span>${未交们.length} 间</span></div>
         <div class="指标标"><i class="浅红"></i>未交</div>
       </button>
-      <button type="button" class="指标小卡${总览筛选集.has('空房') ? ' 选中' : ''}" onclick="切换总览筛选('空房')">
+      <button type="button" class="指标小卡 灰${总览筛选集.has('空房') ? ' 选中' : ''}" onclick="切换总览筛选('空房')">
         <div class="指标主"><b>${空净们.length}</b><span>间</span></div>
         <div class="指标标"><i class="灰"></i>空房</div>
       </button>
-      <button type="button" class="指标小卡${总览筛选集.has('脏房') ? ' 选中' : ''}" onclick="切换总览筛选('脏房')">
+      <button type="button" class="指标小卡 黄${总览筛选集.has('脏房') ? ' 选中' : ''}" onclick="切换总览筛选('脏房')">
         <div class="指标主"><b>${脏房们.length}</b><span>间</span></div>
         <div class="指标标"><i class="黄"></i>待保洁</div>
+      </button>
+      <button type="button" class="指标小卡 绿${总览筛选集.has('月租') ? ' 选中' : ''}" onclick="切换总览筛选('月租')">
+        <div class="指标主"><b>${月租们.length}</b><span>间</span></div>
+        <div class="指标标"><i class="绿"></i>月租</div>
+      </button>
+      <button type="button" class="指标小卡 蓝${总览筛选集.has('日租') ? ' 选中' : ''}" onclick="切换总览筛选('日租')">
+        <div class="指标主"><b>${日租们.length}</b><span>间</span></div>
+        <div class="指标标"><i class="蓝"></i>日租</div>
       </button>
     </div>
 
@@ -226,6 +249,14 @@ function 渲染楼层工作台HTML(卡片列表) {
           <h3>楼层全景</h3>
           ${总览筛选集.size === 0 ? '' : `<span><button type="button" class="淡操作链" onclick="切换总览筛选('全部')">清除筛选</button></span>`}
         </div>
+        <div class="全景图例">
+          <span><i class="红"></i>欠款</span>
+          <span><i class="浅红"></i>未交</span>
+          <span><i class="绿"></i>在住</span>
+          <span><i class="黄"></i>待保洁</span>
+          <span><i class="灰"></i>空房</span>
+          <span><i class="蓝"></i>日租</span>
+        </div>
         <div class="全景楼层表">
           ${排序层.map(([层, 房们]) => `
             <div class="全景楼层行">
@@ -233,7 +264,11 @@ function 渲染楼层工作台HTML(卡片列表) {
               <div class="全景房格行">
                 ${房们.map(c => {
                   const 淡化 = !命中筛选(c);
-                  return `<button type="button" class="全景房格 ${c.样式类}${淡化 ? ' 淡化' : ''}" data-room="${转义(c.房号)}" onclick="点工作台房间('${转义(c.房号)}')" title="${转义(c.房号)} · ${转义(c.状态标签 || '空闲')}${c.金额文 ? ' ' + c.金额文 : ''}">${转义(c.房号)}</button>`;
+                  const 副 = 取全景副标(c);
+                  return `<button type="button" class="全景房格 ${c.样式类}${淡化 ? ' 淡化' : ''}" data-room="${转义(c.房号)}" onclick="点工作台房间('${转义(c.房号)}')" title="${转义(c.房号)} · ${转义(c.状态标签 || '空闲')}${c.金额文 ? ' ' + c.金额文 : ''}">
+                    <span class="格号">${转义(c.房号)}</span>
+                    <span class="格副">${转义(副)}</span>
+                  </button>`;
                 }).join('')}
               </div>
             </div>`).join('')}
@@ -353,50 +388,115 @@ window.点工作台房间 = async function(房号) {
   const 可操作 = b.可计算 || 有结转;
   const 水价 = (房.水费单价 !== '' && 房.水费单价 != null) ? 房.水费单价 : 全局.settings.水价;
   const 电价 = (房.电费单价 !== '' && 房.电费单价 != null) ? 房.电费单价 : 全局.settings.电价;
-  const 交租号 = 房.入住日 ? `每月 ${Number(String(房.入住日).split('-')[2])} 号` : '—';
+  const 交租号 = 房.入住日 ? `每月 ${Number(String(房.入住日).split('-')[2])} 号交租` : '';
+
+  const 房租实额 = b.房租免 ? 0 : (Number(b.房租) || 0);
+  const 管理实额 = b.管理免 ? 0 : (Number(b.管理费) || 0);
+  const 房租管理合计 = 房租实额 + 管理实额;
+  const 水费额 = 未抄 ? 0 : (Number(b.水费) || 0);
+  const 电费额 = 未抄 ? 0 : (Number(b.电费) || 0);
+  const 水电合计 = 水费额 + 电费额;
+  const 构成总额 = 房租管理合计 + 水电合计;
+  const 房租比 = 构成总额 > 0 ? Math.round((房租管理合计 / 构成总额) * 100) : 100;
+  const 水电比 = 构成总额 > 0 ? Math.max(0, 100 - 房租比) : 0;
+
+  const 实收额 = Number(b.实收) || 0;
+  const 补缴额 = Number(b.补缴) || 0;
+  const 实收总 = 实收额 + 补缴额;
+  const 应付额 = 未抄 ? (有结转 ? Number(b.结转) : null) : Number(b.应付租金 || 0);
+  const 欠款额 = b.状态 === '已核收' ? 0 : (Number(b.欠款) > 0 ? Number(b.欠款) : (应付额 != null ? Math.max(0, 应付额 - 实收总) : 0));
+
+  const 档案格 = (键, 值Html, 无值 = false) =>
+    `<div class="总详档项"><span class="k">${键}</span><span class="v${无值 ? ' 淡' : ''}">${值Html}</span></div>`;
 
   打开模态(`
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
-      <h2 style="margin:0">房间详情 · ${转义(房号)} ${状态徽章(b.状态 || '未交')}</h2>
-      <button type="button" class="btn 次 小" onclick="请求关闭模态()">关闭</button>
-    </div>
-    <div class="详情格" style="margin-bottom:14px">
-      <div class="详情项"><span class="详情键">租客姓名</span><span class="详情值">${转义(房.租客姓名 || '—')}</span></div>
-      <div class="详情项"><span class="详情键">联系电话</span><span class="详情值">${房.电话 ? `<a href="tel:${转义(房.电话)}" style="color:var(--主色)">${转义(房.电话)}</a>` : '—'}</span></div>
-      <div class="详情项"><span class="详情键">入住日期 / 交租日</span><span class="详情值">${转义(房.入住日 || '—')} · ${交租号}</span></div>
-      <div class="详情项"><span class="详情键">月租 / 管理费</span><span class="详情值">¥${数字(房.月租金)} / ¥${数字(房.管理费)}</span></div>
-      <div class="详情项"><span class="详情键">押金 / 房卡押金</span><span class="详情值">¥${数字(房.押金)} / ¥${数字(房.房卡押金)}</span></div>
-      <div class="详情项"><span class="详情键">水电单价</span><span class="详情值">水 ¥${水价} · 电 ¥${电价}</span></div>
-    </div>
-
-    <div class="卡片" style="margin-bottom:14px;background:var(--灰)">
-      <h3 style="margin-top:0">本月账单（${月份}）</h3>
-      <div class="详情格">
-        <div class="详情项" style="background:var(--卡片)"><span class="详情键">房租 + 管理费</span><span class="详情值">${b.房租免 ? '<span class="已预缴">已预缴</span>' : '¥' + 数字(b.房租)} + ${b.管理免 ? '<span class="已预缴">已预缴</span>' : '¥' + 数字(b.管理费)}</span></div>
-        <div class="详情项" style="background:var(--卡片)"><span class="详情键">水电费</span><span class="详情值">${未抄 ? '未抄表' : `水 ¥${精金额(b.水费)} + 电 ¥${精金额(b.电费)}`}</span></div>
-        <div class="详情项" style="background:var(--卡片)"><span class="详情键">本月应付</span><span class="详情值" style="color:var(--主色)">${未抄 ? (有结转 ? '¥' + 数字(b.结转) + '（结转）' : '未抄表') : '¥' + 数字(b.应付租金)}</span></div>
-        <div class="详情项" style="background:var(--卡片)"><span class="详情键">已收 / 欠款</span><span class="详情值">实收 ¥${数字((b.实收 || 0) + (b.补缴 || 0))}${b.欠款 > 0 ? ` · <span style="color:var(--红)">欠 ¥${数字(b.欠款)}</span>` : ''}</span></div>
+    <div class="总详盒">
+      <div class="总详头">
+        <div class="总详头左">
+          <h2>房间详情 <span class="房号淡">${转义(房号)}</span></h2>
+          ${状态徽章(b.状态 || '未交')}
+        </div>
+        <button type="button" class="btn 次 小" onclick="请求关闭模态()">关闭</button>
       </div>
-      <div class="工具栏" style="margin:12px 0 0">
-        ${b.待发送 ? `<button class="btn 成功 小" onclick="关闭模态();发送跳转('${转义(房号)}','${转义(b.交租日期 || '')}')">去发送账单</button>` : ''}
-        ${可操作 || b.可计算 ? `<div class="分段操作栏">
-          ${可操作 ? `<button type="button" class="分段钮" onclick="核收('${转义(房号)}',true)">核收</button>` : ''}
-          ${可操作 ? `<button type="button" class="分段钮 红" onclick="平账('${转义(房号)}',true)">平账</button>` : ''}
-          ${可操作 ? `<button type="button" class="分段钮 绿" onclick="追缴('${转义(房号)}',true)">追缴</button>` : ''}
-          ${b.可计算 ? `<button type="button" class="分段钮 黄" onclick="欠费滚存('${转义(房号)}',true)">欠费滚存</button>` : ''}
+
+      <div class="总详档案">
+        ${档案格('租客姓名', 房.租客姓名 ? 转义(房.租客姓名) : '暂无', !房.租客姓名)}
+        ${档案格('联系电话', 房.电话 ? `<a href="tel:${转义(房.电话)}" style="color:inherit;text-decoration:none">${转义(房.电话)}</a>` : '暂无', !房.电话)}
+        ${档案格('入住日期', 房.入住日 ? `${转义(房.入住日)}${交租号 ? `<small>${交租号}</small>` : ''}` : '暂无', !房.入住日)}
+        ${档案格('月租 / 管理费', `¥${数字(房.月租金)} <small>/</small> ¥${数字(房.管理费)}`)}
+        ${档案格('押金 / 房卡押金', `¥${数字(房.押金)} <small>/</small> ¥${数字(房.房卡押金)}`)}
+        ${档案格('水电单价', `水 ¥${水价} <small>·</small> 电 ¥${电价}`)}
+      </div>
+
+      <div class="总详节头">
+        <span class="条"></span><h3>本月账单</h3><span class="副">${月份}</span>
+        ${b.待发送 ? `<button type="button" class="btn 成功 小" style="margin-left:auto" onclick="关闭模态();发送跳转('${转义(房号)}','${转义(b.交租日期 || '')}')">去发送账单</button>` : ''}
+      </div>
+
+      <div class="总详账单卡">
+        <div class="总详账顶">
+          <div>
+            <div class="总详账标">${未抄 && 有结转 ? '上月结转' : '本月应付'}</div>
+            <div class="总详应付数">${应付额 != null ? `<em>¥</em>${数字(应付额)}` : '<span style="font-size:20px;color:var(--ink-3)">未抄表</span>'}</div>
+          </div>
+          ${b.状态 === '已核收'
+            ? `<div class="总详右卡 绿"><div class="小标">本月状态</div><div class="大数">${b.全免 ? '已预缴' : '已结清'}</div></div>`
+            : (欠款额 > 0 ? `<div class="总详右卡 红"><div class="小标">${b.状态 === '欠款' ? '当前欠款' : '未收欠款'}</div><div class="大数">¥${数字(欠款额)}</div></div>` : '')}
+        </div>
+
+        <div class="总详构成条">
+          <span class="段黄" style="width:${房租比}%"></span>
+          <span class="段绿" style="width:${水电比}%"></span>
+        </div>
+        <div class="总详图例">
+          <span><i class="黄"></i>房租 + 管理费 ¥${数字(房租管理合计)}</span>
+          <span><i class="绿"></i>水电费 ${未抄 ? '未抄表' : '¥' + 精金额(水电合计)}</span>
+          ${有结转 ? `<span><i class="红"></i>上月结转 ¥${数字(b.结转)}</span>` : ''}
+        </div>
+
+        <div class="总详账四格">
+          <div class="总详小盒">
+            <div class="标">房租 + 管理费</div>
+            <div class="值">${b.房租免 ? '<span class="已预缴">已预缴</span>' : '¥' + 数字(b.房租)} <small>+</small> ${b.管理免 ? '<span class="已预缴">已预缴</span>' : '¥' + 数字(b.管理费)}</div>
+          </div>
+          <div class="总详小盒">
+            <div class="标">水电费</div>
+            <div class="值">${未抄 ? '<span style="color:var(--ink-3);font-weight:400">未抄表</span>' : `水 ¥${精金额(b.水费)} <small>+</small> 电 ¥${精金额(b.电费)}`}</div>
+          </div>
+          <div class="总详小盒">
+            <div class="标">本月应付</div>
+            <div class="值">${应付额 != null ? `¥${数字(应付额)}${未抄 && 有结转 ? '<small>（结转）</small>' : ''}` : '<span style="color:var(--ink-3);font-weight:400">未抄表</span>'}</div>
+          </div>
+          <div class="总详小盒">
+            <div class="标">实收</div>
+            <div class="值">¥${数字(实收总)}${补缴额 > 0 ? `<small>（含追缴 ¥${数字(补缴额)}）</small>` : ''}</div>
+          </div>
+        </div>
+
+        ${可操作 || b.可计算 ? `
+        <div class="总详处理行">
+          <span class="总详处理字">处理</span>
+          <div class="分段操作栏">
+            ${可操作 ? `<button type="button" class="分段钮 绿" onclick="追缴('${转义(房号)}',true)">追缴</button>` : ''}
+            ${b.可计算 ? `<button type="button" class="分段钮 黄" onclick="欠费滚存('${转义(房号)}',true)">欠费滚存</button>` : ''}
+            ${可操作 ? `<button type="button" class="分段钮" onclick="核收('${转义(房号)}',true)">核收</button>` : ''}
+            ${可操作 ? `<button type="button" class="分段钮 红" onclick="平账('${转义(房号)}',true)">平账</button>` : ''}
+          </div>
         </div>` : ''}
       </div>
-    </div>
 
-    <div class="卡片" style="margin-bottom:0">
-      <h3 style="margin-top:0">租客历史累计（${入住月 ? 入住月 + ' 至今' : '全部记录'} · 共 ${总月数} 期）</h3>
-      <div class="详情格" style="margin-bottom:10px">
-        <div class="详情项"><span class="详情键">已交/结清月数</span><span class="详情值">${已交月数} / ${总月数} 个月</span></div>
-        <div class="详情项"><span class="详情键">累计实收总额</span><span class="详情值" style="color:var(--绿)">¥${数字(累计实收)}</span></div>
-        <div class="详情项"><span class="详情键">累计房租+管理费</span><span class="详情值">¥${数字(累计房租)}</span></div>
-        <div class="详情项"><span class="详情键">累计水电费</span><span class="详情值">¥${精金额(累计水电)}</span></div>
+      <div class="总详节头" style="margin-top:18px">
+        <span class="条"></span><h3>租客历史累计</h3><span class="副">${入住月 ? 入住月 + ' 至今' : '全部记录'} · 共 ${总月数} 期</span>
       </div>
-      ${历史列表.length ? `<div class="表格容器" style="max-height:240px;overflow-y:auto"><table class="斑马 居中表">
+
+      <div class="总详四卡">
+        <div class="总详计卡"><div class="标">已交 / 结清月数</div><div class="数">${已交月数}<small> / ${总月数} 个月</small></div></div>
+        <div class="总详计卡"><div class="标">累计实收</div><div class="数 绿">¥${数字(累计实收)}</div></div>
+        <div class="总详计卡"><div class="标">累计房租 + 管理费</div><div class="数">¥${数字(累计房租)}</div></div>
+        <div class="总详计卡"><div class="标">累计水电费</div><div class="数">¥${精金额(累计水电)}</div></div>
+      </div>
+
+      ${历史列表.length ? `<div class="表格容器" style="max-height:220px;overflow-y:auto"><table class="斑马 居中表">
         <tr><th>月份</th><th>房租/管理费</th><th>水电</th><th>应收</th><th>其它</th><th>实收</th><th>状态</th></tr>
         ${历史列表.map(h => `<tr>
           <td>${h.月份}</td>
@@ -407,7 +507,7 @@ window.点工作台房间 = async function(房号) {
           <td>¥${数字(h.实收)}</td>
           <td>${h.状态 === '欠款' && h.欠款 > 0 ? `<span class="徽章 欠款">欠 ¥${数字(h.欠款)}</span>` : 状态徽章(h.状态)}</td>
         </tr>`).join('')}
-      </table></div>` : '<p class="空" style="padding:8px 0">暂无历史账单记录</p>'}
+      </table></div>` : '<p class="空" style="padding:10px 0">暂无历史账单记录</p>'}
     </div>`);
 };
 
@@ -438,9 +538,22 @@ async function 渲染总览(容器) {
   const 支出比 = 总收入 > 0 ? Math.min(100, Math.round(总支出 / 总收入 * 100)) : (总支出 > 0 ? 100 : 0);
   const 结余比 = Math.max(0, 100 - 支出比);
 
+  const 上次备份 = String((全局.settings && 全局.settings.上次手动备份) || '').slice(0, 10);
+  const 距今 = 上次备份 ? 距今天数(上次备份) : 999;
+  const 暂隐 = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('备份提醒暂隐') === '1';
+  const 备份提醒条 = (!暂隐 && 距今 >= 7) ? `
+    <div id="备份提醒条" class="卡片" style="margin-bottom:12px;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--ink);color:var(--surface);border-color:var(--ink)">
+      <span style="font-size:13px;color:var(--surface)">${上次备份 ? `已 ${距今} 天未手动下载完整备份（上次：${转义(上次备份)}），建议定期异地保存` : '尚未手动下载过完整备份，建议下载一份存到本机或网盘以防设备故障'}</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a class="btn 行内" href="/api/export" download onclick="触发手动备份下载()" style="background:var(--surface);color:var(--ink);border-color:var(--surface);font-weight:600;text-decoration:none">一键下载完整备份</a>
+        <button type="button" class="btn 行内 次" onclick="稍后备份提醒()" style="background:transparent;color:var(--surface);border-color:color-mix(in srgb, var(--surface) 38%, transparent)">稍后提醒</button>
+      </div>
+    </div>` : '';
+
   容器.innerHTML = `
     <div class="总览双栏">
       <div class="总览左栏">
+        ${备份提醒条}
         ${不齐条}
         <div id="总览工作台容器">${渲染楼层工作台HTML(卡片列表)}</div>
       </div>
@@ -584,11 +697,26 @@ window.发送跳转 = function(房号, 交租日期) {
   document.querySelectorAll('.导航 button').forEach(b => b.classList.toggle('激活', b.dataset.page === '账单'));
   渲染();
 };
-// 标记账单已发送给租客（租客账单页账单卡下方的「发送账单」按钮，同步自动复制账单图片到剪贴板）
+window.稍后备份提醒 = function() {
+  try { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('备份提醒暂隐', '1'); } catch (e) {}
+  document.getElementById('备份提醒条')?.remove();
+};
+window.触发手动备份下载 = function() {
+  if (全局 && 全局.settings) 全局.settings.上次手动备份 = `${北京日期()} ${北京时分()}`;
+  document.getElementById('备份提醒条')?.remove();
+  提示('正在下载完整备份，请妥善保存');
+};
+// 标记账单已发送给租客（电脑端自动复制账单图片到剪贴板，手机端自动调起分享图片）
 window.标记已发送 = async function(房号, 月份, idx) {
   if (!(await 询问确认('确认发送账单？', `${转义(房号)}　${月份} 账单标记为已发送给租客`))) return;
   const r = await api('/api/bills/sent', { method: 'POST', body: { 房号, 月份 } });
   if (r.错误) { 提示(r.错误); return; }
+  const 是手机 = Boolean(window.matchMedia && window.matchMedia('(max-width: 720px)').matches);
+  if (是手机 && idx != null && typeof 分享账单图片 === 'function') {
+    await 渲染();
+    await 分享账单图片(idx, { 不重复询问发送: true });
+    return;
+  }
   let 已复制图 = false;
   if (idx != null && typeof 复制账单图片 === 'function') {
     已复制图 = await 复制账单图片(idx, { 静默成功: true, 不下载: true });
@@ -610,16 +738,27 @@ const 备忘选中 = new Set();    // 删除模式下多选的 id
 let 备忘展开 = new Set();      // 展开显示全文的备忘 id（长内容点开/收起）
 
 function 备忘录卡片(列表) {
-  if (!Array.isArray(列表)) return '<div class="卡片"><h2 style="margin:0">备忘录</h2><div class="空">备忘录加载失败，刷新页面重试（服务端可能未重启）</div></div>';
+  if (!Array.isArray(列表)) return '<div class="卡片 待办卡"><h2 style="margin:0">待办事项</h2><div class="空">加载失败，刷新页面重试</div></div>';
   备忘缓存 = 列表;
   const 待办 = 列表.filter(m => !m.完成).length;
-  const 标题 = `<div class="备忘紧凑头"><h2>备忘录</h2><span class="备忘紧凑数" id="备忘待办数" style="${待办 ? '' : 'display:none'}">${待办} 条待办</span></div>`;
-  const 内容 = `<div class="备忘紧凑输">
-      <input id="备忘输入" placeholder="记点什么，回车添加" onkeydown="if(event.key==='Enter'&&!event.isComposing)添加备忘()">
-      <button type="button" class="备忘回车钮" onclick="添加备忘()" title="回车添加">↵</button>
-    </div>
-    <div id="备忘列表">${备忘录列表HTML(列表)}</div>`;
-  return 折叠卡片('备忘录', 标题, 内容);
+  const 已完 = 列表.filter(m => m.完成).length;
+  return `
+    <div class="卡片 待办卡">
+      <div class="待办卡头">
+        <div class="待办卡头左">
+          <h2>待办事项</h2>
+          <span class="待办计数" id="备忘待办数">${待办} 项未完成</span>
+        </div>
+        <button type="button" class="淡操作链" id="备忘清完钮" style="${已完 ? '' : 'display:none'}" onclick="清除已完成备忘()">清除已完成</button>
+      </div>
+      <div class="待办滚动区" id="备忘列表">${备忘录列表HTML(列表)}</div>
+      <div class="待办底输">
+        <input id="备忘输入" placeholder="记一笔，例如：306 空调滤网要清洗" onkeydown="if(event.key==='Enter'&&!event.isComposing)添加备忘()">
+        <button type="button" onclick="添加备忘()" title="回车添加" aria-label="回车添加">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
+        </button>
+      </div>
+    </div>`;
 }
 // Markdown 渲染：先转义 HTML 防 XSS，再把 MD 标记转成安全 HTML（标题/加粗/斜体/列表/代码/链接/删除线）
 function 内联MD(文本) {
@@ -665,19 +804,37 @@ function 备忘内容HTML(m) {
   return `<div class="备忘内容">${渲染MD(内容)}</div>`;
 }
 window.切换备忘展开 = function(id) { 备忘展开.has(id) ? 备忘展开.delete(id) : 备忘展开.add(id); 重绘备忘列表(); };
-function 备忘录列表HTML(列表) {
-  const 行 = 列表.map(m => `<div class="备忘项${m.完成 ? ' 已完成' : ''}${备忘展开.has(m.id) ? ' 备忘项展开' : ''}">
-      <input type="checkbox" class="备忘圆勾" ${m.完成 ? 'checked' : ''} onchange="切换备忘完成(${m.id}, this.checked)" title="标记完成">
+function 备忘单项HTML(m) {
+  return `<div class="待办单项${m.完成 ? ' 已完成' : ''}${备忘展开.has(m.id) ? ' 备忘项展开' : ''}" onclick="点击待办行(event,${m.id},${!m.完成})">
+    <input type="checkbox" class="备忘圆勾" ${m.完成 ? 'checked' : ''} onclick="event.stopPropagation()" onchange="切换备忘完成(${m.id}, this.checked)" title="标记完成">
+    <div class="待办项体">
       ${备忘内容HTML(m)}
-      <span class="备忘日期">${转义((m.日期 || '').slice(5))}</span>
-      <button type="button" class="备忘行删" onclick="删除备忘(${m.id})" title="删除">×</button>
-    </div>`).join('');
-  return (行 || '<div class="空">还没有备忘，用上面的输入框记一条</div>') + 备忘底栏HTML(列表);
+      <div class="待办项元">${转义((m.日期 || '').slice(5) || '—')}</div>
+    </div>
+    <button type="button" class="备忘行删" onclick="event.stopPropagation();删除备忘(${m.id})" title="删除">×</button>
+  </div>`;
 }
-function 备忘底栏HTML(列表) {
-  const 已完成数 = 列表.filter(m => m.完成).length;
-  return 已完成数 ? `<div class="备忘底栏"><button type="button" class="备忘清已完" onclick="清除已完成备忘()">清除已完成（${已完成数}）</button></div>` : '';
+window.点击待办行 = function(e, id, 目标完成) {
+  if (e && e.target && e.target.closest('a,button,input')) return;
+  if (window.getSelection && String(window.getSelection().toString() || '').trim()) return;
+  切换备忘完成(id, 目标完成);
+};
+function 备忘录列表HTML(列表) {
+  if (!列表.length) return '<div class="空" style="padding:26px 0">暂无待办事项，在下方输入框记一笔</div>';
+  const 今日 = 今天();
+  const 今天们 = 列表.filter(m => String(m.日期 || '').slice(0, 10) === 今日);
+  const 更早们 = 列表.filter(m => String(m.日期 || '').slice(0, 10) !== 今日);
+  let html = '';
+  if (今天们.length) {
+    html += `<div class="待办分组标">今天</div>` + 今天们.map(备忘单项HTML).join('');
+  }
+  if (更早们.length) {
+    if (今天们.length) html += `<div class="待办分组标">更早</div>`;
+    html += 更早们.map(备忘单项HTML).join('');
+  }
+  return html;
 }
+function 备忘底栏HTML() { return ''; }
 // 只重绘列表区（勾选、切模式），不请求后端
 function 重绘备忘列表() {
   const 容器 = document.getElementById('备忘列表');
@@ -692,9 +849,11 @@ async function 刷新备忘列表() {
   const 数标 = document.getElementById('备忘待办数');
   if (数标) {
     const 待办 = 备忘缓存.filter(m => !m.完成).length;
-    数标.textContent = `${待办} 条待办`;
-    数标.style.display = 待办 ? '' : 'none';
+    数标.textContent = `${待办} 项未完成`;
+    数标.style.display = '';
   }
+  const 清钮 = document.getElementById('备忘清完钮');
+  if (清钮) 清钮.style.display = 备忘缓存.some(m => m.完成) ? '' : 'none';
 }
 window.切换备忘删除模式 = function() { 备忘删除模式 = !备忘删除模式; 备忘选中.clear(); 重绘备忘列表(); };
 window.备忘选中切换 = function(id, 选中) { 选中 ? 备忘选中.add(id) : 备忘选中.delete(id); 重绘备忘列表(); };
@@ -745,6 +904,14 @@ function 校验身份证(号) {
   let 和 = 0;
   for (let i = 0; i < 17; i++) 和 += Number(s[i]) * 权重[i];
   if (码表[和 % 11] !== s[17]) return { 有效: false, 原因: '校验码不正确' };
+  return { 有效: true };
+}
+
+// 手机号防呆校验：空值不拦（可选字段），非空须为 11 位 1 开头大陆手机号
+function 校验手机号(号) {
+  const s = String(号 || '').replace(/[\s-]/g, '');
+  if (!s) return { 有效: true };
+  if (!/^1[3-9]\d{9}$/.test(s)) return { 有效: false, 原因: '应为 11 位有效手机号（1 开头）' };
   return { 有效: true };
 }
 

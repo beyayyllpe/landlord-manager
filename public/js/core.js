@@ -1,12 +1,52 @@
 // 租房管家 —— 前端逻辑
 'use strict';
 
+function 上报前端错误(来源, 路由, 信息, 堆栈) {
+  try {
+    if (typeof fetch !== 'function' || String(路由 || '').includes('/api/logs/client-error')) return;
+    fetch('/api/logs/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        来源: String(来源 || 'frontend'),
+        路由: String(路由 || ''),
+        信息: String(信息 || '未知错误'),
+        堆栈: String(堆栈 || '')
+      })
+    }).catch(() => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('error', (ev) => {
+    const 位置 = ev && ev.filename ? `${ev.filename}:${ev.lineno || 0}` : 'window';
+    上报前端错误('frontend-js', 位置, (ev && ev.message) || '脚本运行错误', ev && ev.error && ev.error.stack || '');
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    const r = ev && ev.reason;
+    const msg = r && r.message ? r.message : String(r || '未处理的异步异常');
+    上报前端错误('frontend-promise', location.hash || location.pathname, msg, r && r.stack || '');
+  });
+}
+
 async function api(地址, 参数) {
   const 选项 = 参数 || {};
   if (选项.body) { 选项.headers = { 'Content-Type': 'application/json' }; 选项.body = JSON.stringify(选项.body); }
   const r = await fetch(地址, 选项);
   if (r.status === 401) { location.replace('/login'); throw new Error('未登录或登录已过期'); }
-  return r.json();
+  if (typeof r.text !== 'function') return r.json();
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    const msg = `接口返回非 JSON（HTTP ${r.status}）`;
+    上报前端错误('frontend-api', 地址, `${msg}: ${text.slice(0, 120)}`, e.stack || '');
+    throw new Error(msg);
+  }
+  if (r.status >= 500) {
+    上报前端错误('frontend-api', 地址, (data && data.错误) || `HTTP ${r.status}`, '');
+  }
+  return data;
 }
 function 提示(msg) { const el = document.getElementById('提示'); el.textContent = msg; el.classList.add('显示'); setTimeout(() => el.classList.remove('显示'), 1800); }
 function 数字(n) { return String(Math.round(Number(n) || 0)); }

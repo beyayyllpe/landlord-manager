@@ -40,13 +40,37 @@
       transition: opacity .35s ease;
     }
     .背景层.就绪 { opacity: 1; }
-    .背景层 img,
-    .背景层 video {
+    .背景层 .背景主层 {
+      position: relative;
+      z-index: 1;
       width: 100%;
       height: 100%;
       object-fit: cover;
       object-position: center;
       display: block;
+    }
+    .背景层 .背景底层 {
+      display: none;
+    }
+    @media (max-width: 720px), (orientation: portrait) {
+      .背景层 .背景底层 {
+        display: block;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        filter: blur(26px) brightness(0.75);
+        transform: scale(1.12);
+        z-index: 0;
+      }
+      .背景层 .背景主层 {
+        object-fit: contain;
+      }
+      .背景层.专属竖屏 .背景主层 {
+        object-fit: cover;
+      }
     }
     .背景遮罩 {
       position: fixed;
@@ -72,42 +96,72 @@
       box-shadow: var(--阴影浮);
       animation: 淡入 .25s ease-out;
     }
-    /* 锁屏时钟（仅在有自定义背景时显示，替代「租房管家」标题） */
-    .锁屏时钟 {
+    /* 一居中 · 双线 头部（有背景时展示，替代原时钟） */
+    .双线头部 {
       display: none;
       flex-direction: column;
       align-items: center;
-      margin-bottom: 24px;
-      color: #FFFFFF;
-      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.38);
+      text-align: center;
+      color: #fbf8f2;
       user-select: none;
+      position: relative;
+      z-index: 2;
     }
-    .锁屏时间 {
-      font-size: clamp(46px, 7vw, 64px);
-      font-weight: 300;
-      letter-spacing: 2px;
-      line-height: 1.05;
-      font-variant-numeric: tabular-nums;
+    .双线Logo {
+      display: block;
+      width: clamp(240px, 28vw, 350px);
+      max-height: 165px;
+      height: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.42));
+      -webkit-user-drag: none;
     }
-    .锁屏日期 {
-      margin-top: 6px;
-      font-size: 13px;
-      font-weight: 400;
-      letter-spacing: 1.5px;
-      color: rgba(255, 255, 255, 0.82);
+    .双线Logo.默认白 {
+      filter: brightness(0) invert(1) drop-shadow(0 4px 18px rgba(0, 0, 0, 0.45));
+    }
+    .双线英 {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 22px;
+      font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      letter-spacing: 0.42em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.88);
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.48);
+    }
+    .双线英::before,
+    .双线英::after {
+      content: "";
+      width: clamp(36px, 3.8vw, 56px);
+      height: 1px;
+      background: rgba(255, 255, 255, 0.56);
+    }
+    .双线英 span { padding-left: 0.42em; }
+    .双线副 {
+      margin-top: 10px;
+      font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+      font-size: clamp(12px, 1vw, 14px);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.78);
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.48);
     }
 
     body.有背景.登录页体 {
       flex-direction: column;
-      justify-content: flex-end;
-      padding-bottom: clamp(68px, 12vh, 110px);
+      justify-content: center;
+      gap: clamp(34px, 6.5vh, 56px);
+      padding-top: 32px;
+      padding-bottom: 64px;
     }
     body.有背景 .背景遮罩 {
-      background: linear-gradient(180deg, rgba(10, 12, 16, 0.08) 0%, rgba(10, 12, 16, 0.16) 50%, rgba(10, 12, 16, 0.62) 100%);
+      background: linear-gradient(180deg, rgba(10, 12, 14, 0.22) 0%, rgba(10, 12, 14, 0.04) 36%, rgba(10, 12, 14, 0.60) 100%);
     }
-    /* 有背景时：macOS 锁屏式无框极简悬浮，去掉标题和糊住壁纸的大方块 */
+    /* 有背景时：顶部居中双线标题 + 底部毛玻璃胶囊表单 */
     body.有背景 .登录卡 {
-      max-width: 268px;
+      max-width: min(320px, 88vw);
       padding: 0;
       background: transparent;
       border: 0;
@@ -118,20 +172,21 @@
     }
     body.有背景 .品牌,
     body.有背景 .表单组 label { display: none; }
-    body.有背景 .锁屏时钟 { display: flex; }
-    body.有背景 .表单组 { margin-bottom: 10px; }
+    body.有背景 .双线头部 { display: flex; }
+    body.有背景 .表单组 { margin-bottom: 12px; }
     body.有背景 .输入盒 input {
-      height: 38px;
-      padding: 0 16px;
-      border-radius: 999px;
-      background: transparent;
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      height: 46px;
+      padding: 0 20px;
+      border-radius: 23px;
+      background: rgba(18, 20, 24, 0.24);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.34);
       color: #FFFFFF;
-      font-size: 13px;
+      font-size: 15px;
       text-align: center;
-      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+      letter-spacing: 0.12em;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
     }
     body.有背景 .输入盒 input:-webkit-autofill,
     body.有背景 .输入盒 input:-webkit-autofill:hover,
@@ -139,30 +194,33 @@
       -webkit-text-fill-color: #FFFFFF;
       transition: background-color 99999s ease-in-out 0s;
     }
-    body.有背景 .输入盒 input::placeholder { color: rgba(255, 255, 255, 0.72); letter-spacing: 1px; }
+    body.有背景 .输入盒 input::placeholder { color: rgba(255, 255, 255, 0.72); letter-spacing: 0.12em; font-size: 14px; }
     body.有背景 .输入盒 input:focus {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.58);
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+      background: rgba(18, 20, 24, 0.36);
+      border-color: rgba(255, 255, 255, 0.72);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
     }
     body.有背景 .登录钮 {
-      height: 38px;
-      margin-top: 6px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-      border: 1px solid rgba(255, 255, 255, 0.28);
+      height: 46px;
+      margin-top: 4px;
+      border-radius: 23px;
+      background: rgba(255, 255, 255, 0.14);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.42);
       color: #FFFFFF;
-      font-size: 13px;
-      font-weight: var(--fw-medium);
-      letter-spacing: 3px;
-      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5em;
+      padding-left: 0.5em;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
     }
     body.有背景 .登录钮:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.90);
-      color: #1F2329;
-      border-color: transparent;
+      color: #1f2329;
+      border-color: rgba(255, 255, 255, 0.90);
+      text-shadow: none;
     }
     body.有背景 .错误条 {
       background: rgba(169, 63, 43, 0.42);
@@ -310,11 +368,13 @@
   <div class="背景层" id="背景层" aria-hidden="true"></div>
   <div class="背景遮罩" aria-hidden="true"></div>
 
+  <div class="双线头部" aria-hidden="true">
+    <img class="双线Logo 默认白" id="登录标题图" alt="租房管家" src="data:image/png;base64,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">
+    <div class="双线英"><span>Rental Keeper</span></div>
+    <div class="双线副">Property · Billing · Occupancy</div>
+  </div>
+
   <div class="登录卡">
-    <div class="锁屏时钟" aria-hidden="true">
-      <div class="锁屏时间" id="锁屏时间"></div>
-      <div class="锁屏日期" id="锁屏日期"></div>
-    </div>
     <div class="品牌">
       <div class="图标框">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/><path d="M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6"/></svg>
@@ -329,14 +389,14 @@
       <div class="表单组">
         <label for="用户名">用户名</label>
         <div class="输入盒">
-          <input id="用户名" name="username" type="text" autocomplete="username" placeholder="账号" required autofocus>
+          <input id="用户名" name="username" type="text" autocomplete="username" placeholder="账号 / Account" required autofocus>
         </div>
       </div>
 
       <div class="表单组">
         <label for="密码">密码</label>
         <div class="输入盒">
-          <input id="密码" name="password" type="password" autocomplete="current-password" placeholder="密码" required>
+          <input id="密码" name="password" type="password" autocomplete="current-password" placeholder="密码 / Password" required>
         </div>
       </div>
 
@@ -349,20 +409,6 @@
   <footer class="备案底栏" id="备案底栏"></footer>
 
   <script>
-    (function 启动锁屏时钟() {
-      const 星期 = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-      const 刷 = () => {
-        const d = new Date();
-        const p = n => String(n).padStart(2, '0');
-        const t = document.getElementById('锁屏时间');
-        const dt = document.getElementById('锁屏日期');
-        if (t) t.textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
-        if (dt) dt.textContent = `${d.getMonth() + 1}月${d.getDate()}日 · ${星期[d.getDay()]}`;
-      };
-      刷();
-      setInterval(刷, 15000);
-    })();
-
     let tsSiteKey = '';
     let tsWidgetId = null;
     let tsToken = '';
@@ -377,7 +423,17 @@
       list.forEach(fn => fn(tsToken));
     }
 
-    function 等待Turnstile令牌(超时ms = 6000) {
+    function 上报TS异常(原因, 详情) {
+      try {
+        fetch('/api/login/turnstile-diag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 原因, 详情 })
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
+    function 等待Turnstile令牌(超时ms = 12000) {
       if (tsToken) return Promise.resolve(tsToken);
       return new Promise(resolve => {
         const timer = setTimeout(() => {
@@ -397,22 +453,35 @@
       wrap.style.display = 'flex';
       const render = () => {
         if (!window.turnstile || tsWidgetId !== null) return;
-        const 暗 = document.body.classList.contains('有背景') || document.documentElement.getAttribute('data-theme') === 'dark';
-        tsWidgetId = window.turnstile.render(wrap, {
-          sitekey: siteKey,
-          theme: 暗 ? 'dark' : 'light',
-          size: 'normal',
-          callback: token => 通知Turnstile(token),
-          'expired-callback': () => { tsToken = ''; },
-          'error-callback': code => {
-            tsToken = '';
-            const c = String(code || '');
-            tsErrMsg = c === '110200'
-              ? `当前域名（${location.hostname}）未加入 Cloudflare Turnstile 主机名白名单`
-              : `人机验证加载异常（错误码 ${c || '未知'}），请检查 Site Key 或网络`;
-            通知Turnstile('');
-          },
-        });
+        const doRender = () => {
+          if (!window.turnstile || tsWidgetId !== null || typeof window.turnstile.render !== 'function') return;
+          try {
+            const 暗 = document.body.classList.contains('有背景') || document.documentElement.getAttribute('data-theme') === 'dark';
+            tsWidgetId = window.turnstile.render(wrap, {
+              sitekey: siteKey,
+              theme: 暗 ? 'dark' : 'light',
+              size: 'normal',
+              callback: token => 通知Turnstile(token),
+              'expired-callback': () => { tsToken = ''; },
+              'error-callback': code => {
+                tsToken = '';
+                const c = String(code || '');
+                tsErrMsg = c === '110200'
+                  ? `当前域名（${location.hostname}）未加入 Cloudflare Turnstile 主机名白名单`
+                  : `人机验证加载异常（错误码 ${c || '未知'}），请检查 Site Key 或网络`;
+                上报TS异常('error-callback', `code=${c || 'unknown'}, host=${location.hostname}`);
+                通知Turnstile('');
+              },
+            });
+          } catch (err) {
+            上报TS异常('render-error', `${err && err.message || err}, host=${location.hostname}`);
+          }
+        };
+        if (typeof window.turnstile.render === 'function') {
+          doRender();
+        } else if (typeof window.turnstile.ready === 'function') {
+          window.turnstile.ready(doRender);
+        }
       };
       if (window.turnstile) { render(); return; }
       const sc = document.createElement('script');
@@ -422,6 +491,7 @@
       sc.onload = render;
       sc.onerror = () => {
         tsErrMsg = '无法加载 Cloudflare 人机验证脚本，请检查当前网络';
+        上报TS异常('script-load-failed', `host=${location.hostname}`);
         通知Turnstile('');
       };
       document.head.appendChild(sc);
@@ -452,11 +522,25 @@
     (async function 加载自定义背景() {
       try {
         const meta = await fetch('/api/login-bg/meta').then(r => r.json());
-        if (!meta || !meta.hasBg) return;
+        if (meta && meta.logoHasBg) {
+          const logoEl = document.getElementById('登录标题图');
+          if (logoEl) {
+            logoEl.classList.remove('默认白');
+            logoEl.src = '/api/login-bg?target=logo&t=' + Date.now();
+          }
+        }
+        if (!meta || (!meta.hasBg && !meta.mobileHasBg)) return;
         const 层 = document.getElementById('背景层');
-        const url = '/api/login-bg?t=' + Date.now();
-        if (meta.kind === 'video') {
+        const 是竖屏 = Boolean(window.matchMedia && window.matchMedia('(max-width: 720px), (orientation: portrait)').matches);
+        const 用手机图 = Boolean(是竖屏 && meta.mobileHasBg);
+        const kind = 用手机图 ? meta.mobileKind : meta.kind;
+        const hasTarget = 用手机图 ? meta.mobileHasBg : meta.hasBg;
+        if (!hasTarget) return;
+        const url = `/api/login-bg?${用手机图 ? 'target=mobile&' : ''}t=${Date.now()}`;
+        if (用手机图) 层.classList.add('专属竖屏');
+        if (kind === 'video') {
           const v = document.createElement('video');
+          v.className = '背景主层';
           v.src = url;
           v.autoplay = true;
           v.muted = true;
@@ -468,7 +552,15 @@
           });
           层.appendChild(v);
         } else {
+          if (!用手机图) {
+            const bgBlur = document.createElement('img');
+            bgBlur.className = '背景底层';
+            bgBlur.src = url;
+            bgBlur.alt = '';
+            层.appendChild(bgBlur);
+          }
           const img = document.createElement('img');
+          img.className = '背景主层';
           img.src = url;
           img.alt = '';
           img.addEventListener('load', () => {
@@ -502,11 +594,21 @@
         if (tsErrMsg) { 报错(tsErrMsg); return; }
         登录钮.disabled = true;
         登录钮.textContent = '人机验证中...';
-        await 等待Turnstile令牌(6000);
+        if (window.turnstile && tsWidgetId === null) 挂载Turnstile(tsSiteKey);
+        if (window.turnstile && tsWidgetId !== null && !tsToken) {
+          setTimeout(() => { if (!tsToken && window.turnstile && tsWidgetId !== null) window.turnstile.reset(tsWidgetId); }, 4500);
+        }
+        await 等待Turnstile令牌(12000);
         if (!tsToken) {
           登录钮.disabled = false;
           登录钮.textContent = '登 录';
-          报错(tsErrMsg || '人机验证超时，请刷新页面重试');
+          const wrap = document.getElementById('turnstile-wrap');
+          const ifr = wrap && wrap.querySelector('iframe');
+          const 状态 = window.turnstile
+            ? `api.js已加载, widgetId=${tsWidgetId}, iframe=${ifr ? `${Math.round(ifr.getBoundingClientRect().width)}x${Math.round(ifr.getBoundingClientRect().height)}` : 'none'}`
+            : 'api.js未加载完成';
+          if (!tsErrMsg) 上报TS异常('token-timeout', `${状态}, host=${location.hostname}`);
+          报错(tsErrMsg || '人机验证超时，请刷新页面或切换浏览器重试');
           return;
         }
       }

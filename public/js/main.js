@@ -13,6 +13,34 @@ function 更新当前页标题() {
   if (标题 && 激活) 标题.textContent = 当前页 === '设置' ? `设置 · ${激活.textContent}` : 激活.textContent;
 }
 
+const 页面渲染 = { '总览': 渲染总览, '房间': 渲染房间, '抄表': 渲染抄表, '账单': 渲染租客账单, '月租': 渲染月租, '月度账单': 渲染账单, '日租': 渲染日租, '退房': 渲染退房, '收支': 渲染收支, '设置': 渲染设置 };
+function 写入当前路由() {
+  try {
+    const 片段 = 当前页 === '设置'
+      ? (设置节点 === '参数' ? `设置/${设置节点}/${高级设置页签}` : `设置/${设置节点}`)
+      : 当前页;
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('当前路由', 片段);
+    if (typeof location !== 'undefined') {
+      const 目标 = '#' + encodeURIComponent(片段);
+      if (location.hash !== 目标 && typeof history !== 'undefined' && history.replaceState) {
+        history.replaceState(null, '', 目标);
+      }
+    }
+  } catch (e) {}
+}
+function 恢复当前路由() {
+  try {
+    const rawHash = (typeof location !== 'undefined' && location.hash) ? decodeURIComponent(location.hash.slice(1)) : '';
+    const saved = rawHash || (typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('当前路由') || '') : '');
+    if (!saved) return;
+    const [页, 子, 页签] = saved.split('/');
+    if (页 && 页面渲染[页]) {
+      当前页 = 页;
+      if (页 === '设置' && 子) 设置节点 = 子;
+      if (页 === '设置' && 子 === '参数' && 页签) 高级设置页签 = 页签;
+    }
+  } catch (e) {}
+}
 const 页面滚动位置 = {};
 document.getElementById('侧边栏').addEventListener('click', e => {
   const 组头 = e.target.closest('#设置折叠钮');
@@ -26,6 +54,7 @@ document.getElementById('侧边栏').addEventListener('click', e => {
   const 目标页 = btn.dataset.page;
   当前页 = 目标页;
   if (btn.dataset.setting) 设置节点 = btn.dataset.setting;
+  写入当前路由();
   同步导航高亮(); 更新当前页标题(); 关闭抽屉();
   渲染().then(() => {
     const y = 页面滚动位置[目标页] || 0;
@@ -33,7 +62,6 @@ document.getElementById('侧边栏').addEventListener('click', e => {
   });
 });
 
-const 页面渲染 = { '总览': 渲染总览, '房间': 渲染房间, '抄表': 渲染抄表, '账单': 渲染租客账单, '月租': 渲染月租, '月度账单': 渲染账单, '日租': 渲染日租, '退房': 渲染退房, '收支': 渲染收支, '设置': 渲染设置 };
 // 顶栏时钟：北京时间到分。凌晨 0–6 点时额外标出当前营业日（那会儿营业日还是昨天）
 function 更新顶栏时间() {
   const el = document.getElementById('月份显示');
@@ -83,7 +111,9 @@ function 更新备案底栏() {
 }
 
 (async function 初始化() {
+  恢复当前路由();
   应用主题();
+  同步导航高亮();
   更新当前页标题();
   await 校准时间();                                   // 先对表，再按北京时间渲染
   全局 = await api('/api/all');

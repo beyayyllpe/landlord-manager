@@ -365,8 +365,31 @@ async function main() {
       }
     });
 
-    await test('12. 前端模块静态完整性：所有内联事件调用的函数均在全局已定义', async () => {
+    await test('12. 前端模块静态完整性：所有脚本联合加载无重名冲突且内联事件函数均已定义', async () => {
+      const vm = require('vm');
       const jsDir = path.join(__dirname, '..', 'public', 'js');
+      const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+      const order = [...html.matchAll(/<script\s+src="js\/([^"?]+)/g)].map(m => m[1]);
+      const noop = () => {};
+      const el = () => ({ style: {}, classList: { toggle: noop, add: noop, remove: noop }, dataset: {}, addEventListener: noop, querySelectorAll: () => [], querySelector: () => null, innerHTML: '', textContent: '' });
+      const sandbox = {
+        console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Error, Promise, URLSearchParams, Intl,
+        setTimeout: noop, clearTimeout: noop, setInterval: noop, clearInterval: noop, requestAnimationFrame: noop,
+        fetch: async (url) => ({ ok: true, status: 200, json: async () => (url === '/api/all' ? { settings: { 当前月份: '2026-03' }, 房源: [], rooms: [], meters: [], bills: [], daily: [], transactions: [], 退房记录: [], 历史总账单: [], 预缴记录: [], 月度快照: [], 备忘录: [], 日租房态: [] } : (String(url).includes('/api/summary') ? { 数据不齐: [], 欠费: [], 月租已收: 0, 日租已收: 0, 支出: 0, 工资: 0, 合计: 0 } : [])) }),
+        localStorage: { getItem: () => null, setItem: noop },
+        location: { replace: noop, reload: noop },
+        document: {
+          documentElement: { setAttribute: noop },
+          body: { classList: { toggle: noop, add: noop, remove: noop }, insertAdjacentHTML: noop },
+          getElementById: () => el(), querySelectorAll: () => [], querySelector: () => null, addEventListener: noop
+        },
+        window: {}
+      };
+      sandbox.window = sandbox;
+      for (const f of order) {
+        vm.runInNewContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
+      }
+
       const allJs = fs.readdirSync(jsDir).filter(f => f.endsWith('.js'))
         .map(f => fs.readFileSync(path.join(jsDir, f), 'utf8')).join('\n');
       const defs = new Set();
@@ -381,6 +404,110 @@ async function main() {
         }
       }
       assert.deepStrictEqual([...missing], [], `发现未定义的内联事件处理函数: ${[...missing].join(', ')}`);
+    });
+
+    await test('13. 日租预订状态机：新增预订 -> 冲突拦截 -> 确认 -> 预订转入住自动核销并入账', async () => {
+      const bkList0 = await req('GET', '/api/bookings');
+      const today = bkList0.json.今日;
+      const b1 = await req('POST', '/api/bookings', {
+        房号: '801', 客户: '预订客甲', 电话: '13800001111', 渠道: '微信', 人数: 2,
+        入住日: today, 天数: 2, 金额: 320, 定金: 100, 备注: '测试预订'
+      });
+      assert.strictEqual(b1.status, 200);
+      assert.strictEqual(b1.json.记录.状态, 'pending');
+
+      // 同房同区间应触发冲突拦截 400
+      const dup = await req('POST', '/api/bookings', {
+        房号: '801', 客户: '冲突客', 电话: '13900002222',
+        入住日: today, 天数: 2, 金额: 180
+      });
+      assert.strictEqual(dup.status, 400);
+
+      // 确认预订
+      const cfm = await req('PUT', `/api/bookings/${b1.json.记录.id}`, { 状态: 'confirmed' });
+      assert.strictEqual(cfm.status, 200);
+      assert.strictEqual(cfm.json.记录.状态, 'confirmed');
+
+      // 预订转入住：房态转在住 + daily 入账 + 预订状态变为 checkedin
+      const ci = await req('POST', '/api/roomstatus/checkin', {
+        房号: '801', 入住日: today, 天数: 2, 金额: 320,
+        客人们: [{ 姓名: '预订客甲', 电话: '13800001111' }],
+        预订id: b1.json.记录.id
+      });
+      assert.strictEqual(ci.status, 200);
+      assert.strictEqual(ci.json.已入账, true);
+
+      const list = await req('GET', '/api/bookings');
+      const hit = list.json.列表.find(x => x.id === b1.json.记录.id);
+      assert.strictEqual(hit.状态, 'checkedin');
+
+      // 还原：撤销入住 + 删除测试预订
+      await req('POST', '/api/roomstatus/undo-checkin', { 房号: '801' });
+      const del = await req('DELETE', `/api/bookings/${b1.json.记录.id}`);
+      assert.strictEqual(del.status, 200);
+    });
+
+    await test('14. Turnstile Secret 脱敏、按需读取与操作审计日志', async () => {
+      const saved = await req('POST', '/api/settings', {
+        TurnstileSiteKey: '0x4AAAAAAATestSite',
+        TurnstileSecretKey: '0x4AAAAAAATestSecret'
+      });
+      assert.strictEqual(saved.status, 200);
+      assert.strictEqual(saved.json.TurnstileSecretKey, undefined);
+      assert.strictEqual(saved.json.TurnstileSecret已配置, true);
+      assert.strictEqual(saved.json.TurnstileSecret来源, 'settings');
+
+      const all = await req('GET', '/api/all');
+      assert.strictEqual(all.status, 200);
+      assert.strictEqual(all.json.settings.TurnstileSecretKey, undefined);
+      assert.strictEqual(all.json.settings.TurnstileSecret已配置, true);
+
+      const sec = await req('GET', '/api/settings/turnstile-secret');
+      assert.strictEqual(sec.status, 200);
+      assert.strictEqual(sec.json.secretKey, '0x4AAAAAAATestSecret');
+
+      const notFound = await req('GET', '/api/no-such-endpoint-for-test');
+      assert.strictEqual(notFound.status, 404);
+      const clientErr = await req('POST', '/api/logs/client-error', {
+        来源: 'frontend-api', 路由: '/api/test', 信息: '模拟前端接口报错'
+      });
+      assert.strictEqual(clientErr.status, 200);
+
+      const logs = await req('GET', '/api/logs');
+      assert.strictEqual(logs.status, 200);
+      assert.ok(Array.isArray(logs.json.操作日志) && logs.json.操作日志.length > 0);
+      assert.ok(logs.json.操作日志.some(x => x.动作 === '修改账单'));
+      assert.ok(logs.json.操作日志.some(x => x.动作 === '解锁月份'));
+      assert.ok(Array.isArray(logs.json.系统错误日志) && logs.json.系统错误日志.length >= 2);
+      assert.ok(logs.json.系统错误日志.some(x => x.来源 === 'api-404'));
+      assert.ok(logs.json.系统错误日志.some(x => x.来源 === 'frontend-api'));
+      assert.ok(logs.json.系统错误日志.some(x => x.来源 === 'login'));
+
+      const cleared = await req('POST', '/api/logs/clear-all');
+      assert.strictEqual(cleared.status, 200);
+      const logsAfter = await req('GET', '/api/logs');
+      assert.strictEqual(logsAfter.json.操作日志.length, 0);
+      assert.strictEqual(logsAfter.json.系统错误日志.length, 0);
+    });
+
+    await test('15. 报错日志同类合并与登录失败限流保护', async () => {
+      // 清空第 14 项留下的 Turnstile 测试密钥，以便直测密码错误限流
+      await req('POST', '/api/settings', { TurnstileSiteKey: '', TurnstileSecretKey: '' });
+      // 同类报错连续上报两次应合并为 1 条且 次数 === 2
+      await req('POST', '/api/logs/client-error', { 来源: 'frontend-api', 路由: '/api/dup', 信息: '重复报错A' });
+      await req('POST', '/api/logs/client-error', { 来源: 'frontend-api', 路由: '/api/dup', 信息: '重复报错A' });
+      const logs = await req('GET', '/api/logs');
+      const dupRows = logs.json.系统错误日志.filter(x => x.路由 === '/api/dup');
+      assert.strictEqual(dupRows.length, 1);
+      assert.strictEqual(dupRows[0].次数, 2);
+
+      // 登录连续输错 5 次触发 429 限流（第 6 次）
+      for (let i = 0; i < 5; i++) {
+        const bad = await req('POST', '/api/login', { 用户名: 'admin', 密码: 'wrong-password-' + i }, false);
+        assert.strictEqual(bad.status, 401);
+      }
+      const locked = await req('POST', '/api/login', { 用户名: 'admin', 密码: 'newpass456' }, false);
+      assert.strictEqual(locked.status, 429);
     });
 
     console.log(`\n全部 ${passed} 项核心回归测试通过！`);

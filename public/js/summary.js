@@ -333,7 +333,8 @@ function 月租表HTML(账单, 月, 只读, 嵌入工具栏 = '') {
   const 进度 = 应收 > 0 ? Math.min(100, Math.round((实收 / 应收) * 100)) : 0;
   const 显示账单 = 账单状态筛选 === '全部' ? 账单 : 账单.filter(b => b.状态 === 账单状态筛选);
   const 有押金 = 显示账单.some(b => (b.新收押金 || 0) > 0);
-  const 总列数 = 9 + (有押金 ? 1 : 0) + (只读 ? 0 : 1);
+  const 显示操作列 = !只读 && 启用删除;
+  const 总列数 = 9 + (有押金 ? 1 : 0) + (显示操作列 ? 1 : 0);
   return `<div class="卡片">
     <div class="月租表头行">
       <h2 style="margin:0">月租账单（${月}）${锁定徽章(月)} <span style="font-size:var(--fs-xs);font-weight:400;color:var(--次文字);margin-left:6px">单位：元</span></h2>
@@ -347,7 +348,7 @@ function 月租表HTML(账单, 月, 只读, 嵌入工具栏 = '') {
     ${嵌入工具栏}
     <div class="进度条底"><div class="进度条填" style="width:${进度}%"></div></div>
     <div class="表格容器"><table>
-      <tr><th>房号</th><th>状态</th><th>交租日期</th><th class="数字">房租</th>${有押金 ? '<th class="数字">新收押金</th>' : ''}<th class="数字">管理费</th><th class="数字">水费</th><th class="数字">电费</th><th class="数字">欠费滚存</th><th class="数字">实收</th>${只读 ? '' : '<th></th>'}</tr>
+      <tr><th>房号</th><th>状态</th><th>交租日期</th><th class="数字">房租</th>${有押金 ? '<th class="数字">新收押金</th>' : ''}<th class="数字">管理费</th><th class="数字">水费</th><th class="数字">电费</th><th class="数字">欠费滚存</th><th class="数字">实收</th>${显示操作列 ? '<th></th>' : ''}</tr>
     ${显示账单.map(b => {
       const 未出租 = b.状态 === '未出租';
       if (未出租) {
@@ -355,7 +356,7 @@ function 月租表HTML(账单, 月, 只读, 嵌入工具栏 = '') {
       }
       const 已退房 = b.状态 === '已退房';
       const 空列 = 已退房;
-      const 操作 = (只读 || 空列 || !启用删除) ? '' : `<td class="操作列"><button class="btn 行内 危险" onclick="删除账单('${转义(b.房号)}','${月}')">删</button></td>`;
+      const 操作 = !显示操作列 ? '' : (空列 ? '<td></td>' : `<td class="操作列"><button class="btn 行内 危险" onclick="删除账单('${转义(b.房号)}','${月}')">删</button></td>`);
       const 房租列 = 空列 ? '—' : (b.房租已预缴 ? '<span class="已预缴">已预缴</span>' : 数字(b.房租));
       const 管理费列 = 空列 ? '—' : (b.管理费已预缴 ? '<span class="已预缴">已预缴</span>' : 数字(b.管理费));
       const 当月实收 = (b.实收 || 0) + (b.补缴 || 0) + (b.新收押金 || 0) + (b.预缴 || 0);

@@ -20,11 +20,11 @@ async function 渲染租客账单(容器) {
           </div>
           ${账单搜索范围 === '指定' ? `<input type="month" value="${查询月}" onchange="账单指定月=this.value;加载租客账单列表()" style="padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink);font-size:var(--fs-sm)">` : ''}
           ${!全部 ? `<span id="账单日期区" style="display:${账单搜索房号.trim()?'none':'inline-flex'};align-items:center;gap:8px"><div class="日期微调">
-            <button type="button" onclick="账单日期=加日('${账单日期}',-1);渲染()" title="前一天">‹</button>
-            <span class="日期微调字">${账单日期}<input type="date" value="${账单日期}" onchange="账单日期=this.value;渲染()"></span>
-            <button type="button" onclick="账单日期=加日('${账单日期}',1);渲染()" title="后一天">›</button>
+            <button type="button" onclick="改账单日期(加日('${账单日期}',-1))" title="前一天">‹</button>
+            <span class="日期微调字">${账单日期}<input type="date" value="${账单日期}" onchange="改账单日期(this.value)"></span>
+            <button type="button" onclick="改账单日期(加日('${账单日期}',1))" title="后一天">›</button>
           </div>
-          ${非今天 ? `<button type="button" class="淡操作链" onclick="账单日期=今天();渲染()">今天</button>` : ''}</span>` : ''}
+          ${非今天 ? `<button type="button" class="淡操作链" onclick="改账单日期(今天())">今天</button>` : ''}</span>` : ''}
         </div>
         <div class="账单筛选右">
           <div class="搜房盒">
@@ -38,6 +38,18 @@ async function 渲染租客账单(容器) {
   await 加载租客账单列表();
 }
 window.切账单范围 = function(范围) { 账单搜索范围 = 范围; 渲染(); };
+window.改账单日期 = function(新日) {
+  if (!新日) return;
+  账单日期 = 新日;
+  const 目标月 = 新日.slice(0, 7);
+  if (目标月 !== 全局.settings.当前月份) {
+    账单搜索范围 = '指定';
+    账单指定月 = 目标月;
+  } else if (账单搜索范围 === '指定') {
+    账单搜索范围 = '本月';
+  }
+  渲染();
+};
 window.更新搜房UI = function() {
   const 清 = document.getElementById('搜房清除钮');
   if (清) 清.style.display = 账单搜索房号 ? '' : 'none';
@@ -121,10 +133,10 @@ async function 加载租客账单列表() {
       ${b.房间备注 ? `<div class="账单备注">房间备注：${转义(b.房间备注)}</div>` : ''}
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<button class="btn 成功" onclick="标记已发送('${转义(b.房号)}','${b.月份}',${idx})">发送账单</button>` : ''}
-        ${b.可计算 ? `<button class="btn 次 小" onclick="复制账单图片(${idx})">复制图片</button>` : ''}
-        ${b.可计算 ? `<button class="btn 次 小" onclick="复制租客账单(${idx})">复制文本</button>` : ''}
-        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<span style="font-size:var(--fs-xs);color:var(--次文字)">点「发送账单」定格并自动复制账单图片</span>` : ''}
-        ${b.可计算 && b.已发送 ? `<span style="font-size:var(--fs-sm);color:var(--绿)">已发送给租客（账单已定格）</span>${!月份锁定(b.月份) ? `<button class="btn 次 小" onclick="撤销发送('${转义(b.房号)}','${b.月份}')">撤销发送</button>` : ''}` : ''}
+        ${b.可计算 ? `<button class="btn 次 小 仅电脑复制图钮" onclick="复制账单图片(${idx})">复制图片</button>` : ''}
+        ${b.可计算 ? `<button class="btn 次 小 仅手机分享图钮" onclick="分享账单图片(${idx})">分享图片</button>` : ''}
+        ${!月份锁定(b.月份) && b.可计算 && !b.已发送 ? `<span style="font-size:var(--fs-xs);color:var(--次文字)">点「发送账单」定格并自动复制或分享账单图片</span>` : ''}
+        ${b.可计算 && b.已发送 && !月份锁定(b.月份) ? `<button class="btn 次 小" onclick="撤销发送('${转义(b.房号)}','${b.月份}')">撤销发送</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -336,6 +348,55 @@ window.复制账单图片 = async function(idx, 选项 = {}) {
     return false;
   } catch (e) {
     if (!选项.不下载) 提示('复制图片失败（请确认在 HTTPS 或本地环境打开）');
+    return false;
+  }
+};
+
+function 弹出账单大图预览(blob, 原始) {
+  const url = URL.createObjectURL(blob);
+  const 遮罩 = document.createElement('div');
+  遮罩.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px';
+  遮罩.innerHTML = `
+    <div style="color:rgba(255,255,255,0.88);font-size:13px;text-align:center">当前浏览器不支持直接呼出系统分享，请<b>长按下方图片</b>保存或转发</div>
+    <img src="${url}" alt="${转义(原始.房号)} 账单图片" style="max-width:92vw;max-height:74vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,0.45)">
+    <div style="display:flex;gap:10px">
+      <a href="${url}" download="房租账单_${转义(原始.房号)}_${转义(原始.月份)}.png" class="btn 次 小" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.28);text-decoration:none">保存图片</a>
+      <button type="button" class="btn 次 小" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.28)">关闭</button>
+    </div>`;
+  const 关闭 = () => { 遮罩.remove(); URL.revokeObjectURL(url); };
+  遮罩.addEventListener('click', (e) => { if (e.target === 遮罩) 关闭(); });
+  遮罩.querySelector('button').addEventListener('click', 关闭);
+  document.body.appendChild(遮罩);
+}
+
+window.分享账单图片 = async function(idx, 选项 = {}) {
+  const 原始 = (window._当前账单列表 || [])[idx];
+  if (!原始) return false;
+  try {
+    const blob = await 生成账单图片Blob(原始);
+    const fileName = `房租账单_${原始.房号}_${原始.月份}.png`;
+    const file = new File([blob], fileName, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      try {
+        await navigator.share({ files: [file], title: `${原始.房号} 房租账单` });
+        if (!选项.不重复询问发送 && !原始.已发送 && !月份锁定(原始.月份)) {
+          if (await 询问确认('是否标记为已发送？', `已分享 ${转义(原始.房号)}（${原始.月份}）账单，要同时标记为「已发送」吗？`)) {
+            const r = await api('/api/bills/sent', { method: 'POST', body: { 房号: 原始.房号, 月份: 原始.月份 } });
+            if (!r.错误) { 提示('已标记为已发送'); 渲染(); }
+          }
+        }
+        return true;
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === 'AbortError') return false;
+        // 若 iOS Safari 因异步调用限制（NotAllowedError）拦截分享面板，自动降级为大图预览
+        弹出账单大图预览(blob, 原始);
+        return false;
+      }
+    }
+    弹出账单大图预览(blob, 原始);
+    return false;
+  } catch (e) {
+    提示('分享失败：' + (e && e.message || '请稍后重试'));
     return false;
   }
 };
