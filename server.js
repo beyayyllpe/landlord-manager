@@ -1095,7 +1095,7 @@ app.post('/api/settings', (req, res) => {
         'logoSize','logoTint','logoStroke','logoStrokeColor','logoShadow',
         'titleY','formY','formStyle','formWidth','inputRadius','btnText',
         'textColor','textWeight','textStroke','textStrokeColor','textShadow',
-        'texts','showFoot','customCss'
+        'texts','widgets','showFoot','customCss'
       ];
       const 净 = {};
       for (const k of 允许) {

@@ -2802,7 +2802,18 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设文项 span { min-width: 30px; flex-shrink: 0; }
 .外设文项 input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ink); cursor: pointer; }
 .外设文项 output { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
-.外设预览文字层 { position: absolute; inset: 0; pointer-events: none; }
+.外设预览文字层, .外设预览控件层 { position: absolute; inset: 0; pointer-events: none; }
+.外设预览控件 {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  text-align: center;
+}
+.外设预览控件.控件-clock .时 { font-size: 38px; font-weight: 300; letter-spacing: .06em; line-height: 1.05; }
+.外设预览控件.控件-clock .期 { font-size: 12px; opacity: .82; letter-spacing: .16em; margin-top: 4px; }
+.外设预览控件.控件-greeting { font-size: 15px; font-weight: 500; letter-spacing: .18em; }
+.外设预览控件.控件-lunar { font-size: 13px; letter-spacing: .22em; opacity: .88; }
+.外设预览控件.控件-divider { width: 220px; height: 1px; background: currentColor; opacity: .45; }
 .外设预览文项 {
   position: absolute;
   transform: translate(-50%, -50%);

@@ -281,6 +281,12 @@ function 默认外观配置() {
       { text: 'Rental Keeper', line: true, color: '#ffffff', y: 34, x: 50, size: 13, tracking: 42 },
       { text: 'Property · Billing · Occupancy', line: false, color: '#ffffff', y: 39, x: 50, size: 12, tracking: 18 }
     ],
+    widgets: {
+      clock: { on: false, color: '#ffffff', y: 14, x: 50, size: 100 },
+      greeting: { on: false, color: '#ffffff', y: 21, x: 50, size: 100 },
+      lunar: { on: false, color: '#ffffff', y: 26, x: 50, size: 100 },
+      divider: { on: false, color: '#ffffff', y: 45, x: 50, size: 100 }
+    },
     showFoot: true,
     customCss: ''
   };
@@ -405,12 +411,13 @@ function 渲染预览舞台到(后缀) {
   const logoTintBox = document.getElementById('外设预览Logo着色' + 后缀);
   const logoImg = document.getElementById('外设预览Logo' + 后缀);
   if (logoWrap && logoTintBox && logoImg) {
+    logoWrap.style.display = 外设meta.logoHasBg ? 'inline-flex' : 'none';
     const scale = (Number(c.logoSize) || 100) / 100;
     logoWrap.style.transform = `scale(${scale})`;
     logoWrap.style.transformOrigin = 'center center';
-    logoWrap.style.filter = 生成Logo滤镜(c.logoStroke, c.logoStrokeColor, c.logoShadow);
+    logoWrap.style.filter = 'none';
     const tint = String(c.logoTint || '').trim();
-    if (tint) {
+    if (tint && 外设meta.logoHasBg) {
       const src = logoImg.getAttribute('src') || '';
       logoTintBox.style.backgroundColor = tint;
       logoTintBox.style.webkitMask = `url("${src}") center / contain no-repeat`;
@@ -435,6 +442,28 @@ function 渲染预览舞台到(后缀) {
       return t.line
         ? `<div class="${cls}" style="${sty}"><i></i><em style="padding-left:${tr}">${转义(t.text)}</em><i></i></div>`
         : `<div class="${cls}" style="${sty}"><em style="padding-left:${tr}">${转义(t.text)}</em></div>`;
+    }).join('');
+  }
+
+  const widgetLayer = document.getElementById('外设预览控件层' + 后缀);
+  if (widgetLayer) {
+    const ws = (c.widgets && typeof c.widgets === 'object') ? c.widgets : {};
+    const now = new Date();
+    const hm = now.toTimeString().slice(0, 5);
+    const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][now.getDay()];
+    const dateStr = `${now.getMonth() + 1}月${now.getDate()}日 · ${week}`;
+    const h = now.getHours();
+    const greet = h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
+    let lunarStr = '';
+    try { lunarStr = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).format(now); } catch (e) {}
+    widgetLayer.innerHTML = Object.entries(ws).map(([k, v]) => {
+      if (!v || !v.on) return '';
+      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 20)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
+      if (k === 'clock') return `<div class="外设预览控件 控件-clock 登录控件 登录控件-clock" style="${sty}"><div class="时">${hm}</div><div class="期">${dateStr}</div></div>`;
+      if (k === 'greeting') return `<div class="外设预览控件 控件-greeting 登录控件 登录控件-greeting" style="${sty}">${greet}</div>`;
+      if (k === 'lunar') return `<div class="外设预览控件 控件-lunar 登录控件 登录控件-lunar" style="${sty}">农历 ${lunarStr}</div>`;
+      if (k === 'divider') return `<div class="外设预览控件 控件-divider 登录控件 登录控件-divider" style="${sty}"></div>`;
+      return '';
     }).join('');
   }
 
@@ -507,9 +536,10 @@ function 外设放大预览() {
           <img class="外设预览底图 背景主层" id="外设预览底图_大" alt="">
           <div class="外设预览遮罩 背景遮罩" id="外设预览遮罩_大"></div>
           <div class="外设预览标题区 双线头部" id="外设预览标题区_大">
-            <div class="Logo滤镜盒" id="外设预览Logo盒_大"><div class="Logo着色层" id="外设预览Logo着色_大"><img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图"></div></div>
+            <div class="Logo滤镜盒" id="外设预览Logo盒_大"><div class="Logo着色层" id="外设预览Logo着色_大"><img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="Logo"></div></div>
           </div>
           <div class="外设预览文字层" id="外设预览文字层_大"></div>
+          <div class="外设预览控件层" id="外设预览控件层_大"></div>
           <div class="外设预览表单 登录卡" id="外设预览表单_大">
             <div class="外设预览假框">账号 / Account</div>
             <div class="外设预览假框">密码 / Password</div>
@@ -642,10 +672,39 @@ let 外设当前标签 = 'look';
 const 外设标签列表 = [
   ['look', '外观'],
   ['bg', '背景'],
-  ['title', '标题'],
+  ['logo', 'Logo'],
   ['form', '表单'],
+  ['widget', '控件'],
   ['adv', '高级'],
 ];
+
+const 外设控件元数据 = [
+  ['clock', '实时时钟', '当前时间与日期星期'],
+  ['greeting', '时段问候', '早安 / 午安 / 傍晚好 / 夜深了'],
+  ['lunar', '今日农历', '自动显示农历月日'],
+  ['divider', '装饰细线', '极简半透明横向分割线']
+];
+
+function 外设件改(k, 键, 值, el) {
+  if (!外设草稿) return;
+  if (!外设草稿.widgets || typeof 外设草稿.widgets !== 'object') {
+    外设草稿.widgets = 深拷贝外观(默认外观配置().widgets);
+  }
+  const item = 外设草稿.widgets[k] || (外设草稿.widgets[k] = { on: false, color: '#ffffff', y: 20, x: 50, size: 100 });
+  if (键 === 'on') {
+    item.on = Boolean(值);
+    const body = document.getElementById(`外设件体_${k}`);
+    if (body) body.hidden = !item.on;
+  } else if (键 === 'color') {
+    item.color = String(值);
+  } else {
+    item[键] = Number(值);
+    if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
+      el.nextElementSibling.textContent = `${值}%`;
+    }
+  }
+  更新外设预览();
+}
 
 function 外设显示值(键, 值) {
   if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius'].includes(键)) return `${值}px`;
@@ -760,7 +819,8 @@ async function 设置_主题() {
   }
   const c = 外设草稿;
   if (!Array.isArray(c.texts)) c.texts = 默认外观配置().texts;
-  const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
+  if (!c.widgets || typeof c.widgets !== 'object') c.widgets = 深拷贝外观(默认外观配置().widgets);
+  const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : '';
 
   setTimeout(更新外设预览, 0);
 
@@ -787,10 +847,10 @@ async function 设置_主题() {
       外设滑块HTML('overlay', 0, 80, 1, c.overlay)),
   ].join(''));
 
-  const 标题面板 = 面板('title', [
-    外设行HTML('标题图 Logo', '推荐透明背景 PNG',
+  const Logo面板 = 面板('logo', [
+    外设行HTML('Logo', '推荐透明背景 PNG',
       `<div class="外设磁贴列 单格">
-        ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
+        ${外设磁贴HTML('Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
       </div>`, '顶对齐'),
     外设行HTML('Logo 染色', '透明 PNG 可任意染色',
       `<input type="color" id="外设Logo取色" class="外设取色" value="${c.logoTint || '#f6d594'}" oninput="外设调色('logoTint',this.value)" title="选择 Logo 染色">
@@ -799,7 +859,7 @@ async function 设置_主题() {
        <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原</button>`),
     外设行HTML('Logo 大小', '',
       外设滑块HTML('logoSize', 40, 250, 1, c.logoSize)),
-    外设行HTML('标题位置', '距离顶部的百分比',
+    外设行HTML('Logo 位置', '距离顶部的百分比',
       外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
 
     外设分组HTML('添加文字'),
@@ -821,6 +881,28 @@ async function 设置_主题() {
     外设行HTML('按钮文字', '',
       `<input type="text" class="外设输入框" value="${转义(c.btnText || '登 录')}" maxlength="20" oninput="外设字('btnText',this.value)" placeholder="登 录">`),
   ].join(''));
+
+  const 控件面板 = 面板('widget', 外设控件元数据.map(([k, 名, 述]) => {
+    const w = (c.widgets && c.widgets[k]) || { on: false, color: '#ffffff', y: 20, x: 50, size: 100 };
+    return `
+      <div class="外设文卡" style="margin-top:0;margin-bottom:10px">
+        <div class="外设文头" style="justify-content:space-between">
+          <div><b style="font-size:13.5px">${名}</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">${述}</small></div>
+          <label class="外设开关"><input type="checkbox" ${w.on ? 'checked' : ''} onchange="外设件改('${k}','on',this.checked)"><span class="外设开关轨"></span></label>
+        </div>
+        <div id="外设件体_${k}" ${w.on ? '' : 'hidden'} style="padding-top:6px;border-top:1px dashed var(--border)">
+          <div class="外设文头" style="margin-bottom:6px">
+            <span style="font-size:12px;color:var(--ink-2)">颜色</span>
+            <input type="color" class="外设取色" value="${w.color || '#ffffff'}" oninput="外设件改('${k}','color',this.value)" title="${名}颜色">
+          </div>
+          <div class="外设文格">
+            <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${w.y ?? 20}" oninput="外设件改('${k}','y',this.value,this)"><output>${w.y ?? 20}%</output></label>
+            <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${w.x ?? 50}" oninput="外设件改('${k}','x',this.value,this)"><output>${w.x ?? 50}%</output></label>
+            <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${w.size ?? 100}" oninput="外设件改('${k}','size',this.value,this)"><output>${w.size ?? 100}%</output></label>
+          </div>
+        </div>
+      </div>`;
+  }).join(''));
 
   const 高级面板 = 面板('adv', [
     外设行HTML('自定义 CSS', '绝对优先覆盖前面所有外观设置。<br>可用类名：.背景遮罩 .双线头部 .双线英 .双线副 .登录卡 .输入盒 .登录钮 .备案底栏（也可用 ::before / ::after 伪元素添加文字）',
@@ -847,8 +929,9 @@ async function 设置_主题() {
         <nav class="外设页签栏" role="tablist">${页签HTML}</nav>
         ${外观面板}
         ${背景面板}
-        ${标题面板}
+        ${Logo面板}
         ${表单面板}
+        ${控件面板}
         ${高级面板}
       </div>
 
@@ -870,9 +953,10 @@ async function 设置_主题() {
               <img class="外设预览底图 背景主层" id="外设预览底图" alt="">
               <div class="外设预览遮罩 背景遮罩" id="外设预览遮罩"></div>
               <div class="外设预览标题区 双线头部" id="外设预览标题区">
-                <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图"></div></div>
+                <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="Logo"></div></div>
               </div>
               <div class="外设预览文字层" id="外设预览文字层"></div>
+              <div class="外设预览控件层" id="外设预览控件层"></div>
               <div class="外设预览表单 登录卡" id="外设预览表单">
                 <div class="外设预览假框">账号 / Account</div>
                 <div class="外设预览假框">密码 / Password</div>
