@@ -454,7 +454,7 @@ function 渲染预览舞台到(后缀) {
 
   const foot = document.getElementById('外设预览备案' + 后缀);
   if (foot) {
-    foot.style.display = c.showFoot ? 'block' : 'none';
+    foot.style.display = 'block';
     foot.style.color = tc;
     foot.style.textShadow = textShadowCss;
   }
@@ -825,8 +825,6 @@ async function 设置_主题() {
       外设滑块HTML('blur', 0, 16, 1, c.blur)),
     外设行HTML('按钮文字', '',
       `<input type="text" class="外设输入框" value="${转义(c.btnText || '登 录')}" maxlength="20" oninput="外设字('btnText',this.value)" placeholder="登 录">`),
-    外设行HTML('底部备案信息', '显示登录页底部的备案号',
-      外设开关HTML('showFoot', c.showFoot)),
   ].join(''));
 
   const 高级面板 = 面板('adv', [

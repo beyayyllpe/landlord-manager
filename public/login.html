@@ -718,10 +718,6 @@
           if (wg.autoContrast === false) {
             document.documentElement.style.setProperty('--auto-shadow', 'none');
           }
-          if (wg.showFoot === false) {
-            const f = document.getElementById('备案底栏');
-            if (f) f.style.display = 'none';
-          }
         }
         const icp = (info && info.ICP备案 || '').trim();
         const ga = (info && info.公安备案 || '').trim();
