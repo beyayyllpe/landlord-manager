@@ -286,10 +286,14 @@ function 默认外观配置() {
   };
 }
 
+function 深拷贝外观(obj) {
+  return JSON.parse(JSON.stringify(obj || {}));
+}
+
 function 读外观配置() {
   const saved = (typeof 全局 !== 'undefined' && 全局 && 全局.settings && 全局.settings.外观 && typeof 全局.settings.外观 === 'object')
     ? 全局.settings.外观 : {};
-  return Object.assign(默认外观配置(), saved);
+  return Object.assign(默认外观配置(), 深拷贝外观(saved));
 }
 
 function 应用全局外观() {
@@ -535,7 +539,7 @@ function 外设选(键, 值, 按钮El) {
     更新外设预览();
     return;
   }
-  渲染设置页();
+  刷新设置详情();
 }
 
 function 外设滑(键, 值) {
@@ -579,17 +583,17 @@ function 外设切预览(设备, 保持放大) {
 
 function 外设撤销() {
   if (!外设快照) return;
-  外设草稿 = Object.assign({}, 外设快照);
+  外设草稿 = 深拷贝外观(外设快照);
   if (外设草稿.theme && 外设草稿.theme !== 主题) 切换主题(外设草稿.theme);
   应用全局外观(外设草稿);
-  渲染设置页();
+  刷新设置详情();
   提示('已撤销未保存的更改');
 }
 
 function 外设恢复默认() {
   外设草稿 = 默认外观配置();
   应用全局外观(外设草稿);
-  渲染设置页();
+  刷新设置详情();
   提示('已恢复默认外观预览，请点击“保存设置”生效');
 }
 
@@ -600,7 +604,7 @@ async function 外设保存() {
   if (typeof 全局 === 'object' && 全局) 全局.settings = 新设置;
   if (外设草稿.theme && 外设草稿.theme !== 主题) 切换主题(外设草稿.theme);
   应用全局外观(外设草稿);
-  外设快照 = Object.assign({}, 外设草稿);
+  外设快照 = 深拷贝外观(外设草稿);
   更新外设状态条();
   提示('外观与登录页设置已保存');
 }
@@ -689,6 +693,32 @@ function 外设文改(idx, 键, 值, el) {
   更新外设预览();
 }
 
+function 外设自由文字HTML(list) {
+  return (Array.isArray(list) ? list : []).map((t, i) => `
+    <div class="外设文卡">
+      <div class="外设文头">
+        <input type="color" class="外设取色" value="${t.color || '#ffffff'}" oninput="外设文改(${i},'color',this.value)" title="该行文字颜色">
+        <input type="text" class="外设输入框" value="${转义(t.text || '')}" maxlength="60" oninput="外设文改(${i},'text',this.value)" placeholder="输入任意文字...">
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" ${t.line ? 'checked' : ''} onchange="外设文改(${i},'line',this.checked)">双线
+        </label>
+        <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
+      </div>
+      <div class="外设文格">
+        <label class="外设文项"><span>上下</span><input type="range" min="5" max="92" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
+        <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
+        <label class="外设文项"><span>大小</span><input type="range" min="10" max="36" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
+        <label class="外设文项"><span>间距</span><input type="range" min="0" max="80" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
+      </div>
+    </div>`).join('');
+}
+
+function 刷新自由文字列表() {
+  const box = document.getElementById('外设自由文字列表');
+  if (box && 外设草稿) box.innerHTML = 外设自由文字HTML(外设草稿.texts);
+  更新外设预览();
+}
+
 function 外设文增() {
   if (!外设草稿) return;
   if (!Array.isArray(外设草稿.texts)) 外设草稿.texts = [];
@@ -702,13 +732,13 @@ function 外设文增() {
     size: Number(last.size || 13),
     tracking: Number(last.tracking || 20)
   });
-  渲染设置页();
+  刷新自由文字列表();
 }
 
 function 外设文删(idx) {
   if (!外设草稿 || !Array.isArray(外设草稿.texts)) return;
   外设草稿.texts.splice(idx, 1);
-  渲染设置页();
+  刷新自由文字列表();
 }
 
 function 外设切标签(键) {
@@ -723,7 +753,7 @@ async function 设置_主题() {
   if (!外设快照) {
     外设快照 = 读外观配置();
     外设快照.theme = 主题;
-    外设草稿 = Object.assign({}, 外设快照);
+    外设草稿 = 深拷贝外观(外设快照);
   } else {
     外设草稿.theme = 主题;
     外设快照.theme = 主题;
@@ -777,24 +807,8 @@ async function 设置_主题() {
     外设行HTML('标题位置', '距离顶部的百分比',
       外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
 
-    外设分组HTML('自由文字（上下 / 左右 / 大小 / 间距）'),
-    c.texts.map((t, i) => `
-      <div class="外设文卡">
-        <div class="外设文头">
-          <input type="color" class="外设取色" value="${t.color || c.textColor || '#ffffff'}" oninput="外设文改(${i},'color',this.value)" title="该行文字颜色">
-          <input type="text" class="外设输入框" value="${转义(t.text || '')}" maxlength="60" oninput="外设文改(${i},'text',this.value)" placeholder="输入任意文字...">
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);cursor:pointer;white-space:nowrap">
-            <input type="checkbox" ${t.line ? 'checked' : ''} onchange="外设文改(${i},'line',this.checked)">双线
-          </label>
-          <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
-        </div>
-        <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="5" max="92" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="10" max="36" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
-          <label class="外设文项"><span>间距</span><input type="range" min="0" max="80" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
-        </div>
-      </div>`).join(''),
+    外设分组HTML('自由文字'),
+    `<div id="外设自由文字列表">${外设自由文字HTML(c.texts)}</div>`,
     `<button type="button" class="外设文增钮" onclick="外设文增()"><span class="外设文增标">＋</span><span>添加一行文字</span></button>`,
   ].join(''));
 

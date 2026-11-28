@@ -3259,35 +3259,6 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   max-height: 78vh;
   aspect-ratio: 16 / 10;
 }
-.外设预览假框 {
-  height: 24px; border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, .32);
-  background: rgba(255, 255, 255, .08);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9.5px; opacity: .82;
-}
-.外设预览表单.样式-solid .外设预览假框 {
-  border-color: rgba(0,0,0,.12);
-  background: rgba(0,0,0,.04);
-  color: #444;
-}
-.外设预览假钮 {
-  height: 24px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 600; letter-spacing: .28em;
-  background: rgba(255, 255, 255, .16);
-  border: 1px solid rgba(255, 255, 255, .42);
-}
-.外设预览表单.样式-solid .外设预览假钮 {
-  background: var(--preview-accent, #18181b);
-  color: #fff;
-  border-color: transparent;
-}
-.外设预览备案 {
-  position: absolute; left: 0; right: 0; bottom: 8px;
-  text-align: center; font-size: 8.5px; opacity: .7;
-  pointer-events: none;
-}
 .外设预览提示 {
   margin-top: 8px;
   font-size: 11.5px;
