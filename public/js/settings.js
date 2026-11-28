@@ -720,6 +720,16 @@ const 外设标签列表 = [
   ['adv', '高级'],
 ];
 
+function 外设微调同步(el, val) {
+  const row = el && el.parentElement;
+  if (!row) return;
+  row.querySelectorAll('input').forEach(inp => { if (inp !== el && inp.value !== String(val)) inp.value = val; });
+}
+
+function 外设微调HTML(label, min, max, val, unit, onfn) {
+  return `<label class="外设文项"><span>${label}</span><input type="range" min="${min}" max="${max}" step="1" value="${val}" oninput="${onfn}"><input class="外设数字框" type="number" min="${min}" max="${max}" step="1" value="${val}" oninput="${onfn}"><span class="外设单位">${unit}</span></label>`;
+}
+
 function 外设件改(k, 键, 值, el) {
   if (!外设草稿) return;
   if (!外设草稿.widgets || typeof 外设草稿.widgets !== 'object') {
@@ -743,10 +753,10 @@ function 外设件改(k, 键, 值, el) {
       if (body) body.hidden = 值 === 'hide';
     }
   } else {
-    item[键] = Number(值);
-    if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
-      el.nextElementSibling.textContent = `${值}%`;
-    }
+    const num = Number(值);
+    if (Number.isNaN(num)) return;
+    item[键] = num;
+    外设微调同步(el, num);
   }
   更新外设预览();
 }
@@ -764,10 +774,10 @@ function 外设线HTML(list) {
         <button type="button" class="外设小钮 危" onclick="外设线删(${i})">删除</button>
       </div>
       <div class="外设文格">
-        <label class="外设文项"><span>透明</span><input type="range" min="0" max="100" step="1" value="${d.opacity ?? 45}" oninput="外设线改(${i},'opacity',this.value,this)"><output>${d.opacity ?? 45}%</output></label>
-        <label class="外设文项"><span>长度</span><input type="range" min="10" max="300" step="1" value="${d.size ?? 100}" oninput="外设线改(${i},'size',this.value,this)"><output>${d.size ?? 100}%</output></label>
-        <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${d.y ?? 45}" oninput="外设线改(${i},'y',this.value,this)"><output>${d.y ?? 45}%</output></label>
-        <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${d.x ?? 50}" oninput="外设线改(${i},'x',this.value,this)"><output>${d.x ?? 50}%</output></label>
+        ${外设微调HTML('透明', 0, 100, d.opacity ?? 45, '%', `外设线改(${i},'opacity',this.value,this)`)}
+        ${外设微调HTML('长度', 1, 500, d.size ?? 100, '%', `外设线改(${i},'size',this.value,this)`)}
+        ${外设微调HTML('上下', 0, 100, d.y ?? 45, '%', `外设线改(${i},'y',this.value,this)`)}
+        ${外设微调HTML('左右', 0, 100, d.x ?? 50, '%', `外设线改(${i},'x',this.value,this)`)}
       </div>
     </div>`).join('');
 }
@@ -788,10 +798,10 @@ function 外设线改(i, 键, 值, el) {
       el.classList.add('选中');
     }
   } else {
-    item[键] = Number(值);
-    if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
-      el.nextElementSibling.textContent = `${值}%`;
-    }
+    const num = Number(值);
+    if (Number.isNaN(num)) return;
+    item[键] = num;
+    外设微调同步(el, num);
   }
   更新外设预览();
 }
@@ -858,9 +868,13 @@ function 外设文改(idx, 键, 值, el) {
   if (!Array.isArray(外设草稿.texts)) 外设草稿.texts = 默认外观配置().texts;
   const item = 外设草稿.texts[idx];
   if (!item) return;
-  item[键] = (键 === 'text' || 键 === 'color') ? String(值) : (键 === 'line' ? Boolean(值) : Number(值));
-  if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
-    el.nextElementSibling.textContent = 键 === 'size' ? `${值}px` : (键 === 'tracking' ? `${(Number(值)/100).toFixed(2)}em` : `${值}%`);
+  if (键 === 'text' || 键 === 'color') item[键] = String(值);
+  else if (键 === 'line') item[键] = Boolean(值);
+  else {
+    const num = Number(值);
+    if (Number.isNaN(num)) return;
+    item[键] = num;
+    外设微调同步(el, num);
   }
   更新外设预览();
 }
@@ -874,10 +888,10 @@ function 外设自由文字HTML(list) {
         <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
       </div>
       <div class="外设文格">
-        <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
-        <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
-        <label class="外设文项"><span>大小</span><input type="range" min="8" max="72" step="1" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
-        <label class="外设文项"><span>间距</span><input type="range" min="0" max="120" step="1" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
+        ${外设微调HTML('上下', 0, 100, t.y ?? 34, '%', `外设文改(${i},'y',this.value,this)`)}
+        ${外设微调HTML('左右', 0, 100, t.x ?? 50, '%', `外设文改(${i},'x',this.value,this)`)}
+        ${外设微调HTML('大小', 1, 120, t.size ?? 13, 'px', `外设文改(${i},'size',this.value,this)`)}
+        ${外设微调HTML('间距', 0, 200, t.tracking ?? 20, '', `外设文改(${i},'tracking',this.value,this)`)}
       </div>
     </div>`).join('');
 }
@@ -1014,9 +1028,9 @@ async function 设置_主题() {
           <input type="color" class="外设取色" value="${clk.color || '#ffffff'}" oninput="外设件改('clock','color',this.value)" title="时钟颜色">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${clk.y ?? 14}" oninput="外设件改('clock','y',this.value,this)"><output>${clk.y ?? 14}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${clk.x ?? 50}" oninput="外设件改('clock','x',this.value,this)"><output>${clk.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${clk.size ?? 100}" oninput="外设件改('clock','size',this.value,this)"><output>${clk.size ?? 100}%</output></label>
+          ${外设微调HTML('上下', 0, 100, clk.y ?? 14, '%', `外设件改('clock','y',this.value,this)`)}
+          ${外设微调HTML('左右', 0, 100, clk.x ?? 50, '%', `外设件改('clock','x',this.value,this)`)}
+          ${外设微调HTML('大小', 10, 400, clk.size ?? 100, '%', `外设件改('clock','size',this.value,this)`)}
         </div>
       </div>
     </div>`,
@@ -1031,9 +1045,9 @@ async function 设置_主题() {
           <input type="text" class="外设输入框" value="${转义(grt.custom || '')}" maxlength="40" oninput="外设件改('greeting','custom',this.value)" placeholder="自定义问候语（留空使用默认）">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${grt.y ?? 21}" oninput="外设件改('greeting','y',this.value,this)"><output>${grt.y ?? 21}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${grt.x ?? 50}" oninput="外设件改('greeting','x',this.value,this)"><output>${grt.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${grt.size ?? 100}" oninput="外设件改('greeting','size',this.value,this)"><output>${grt.size ?? 100}%</output></label>
+          ${外设微调HTML('上下', 0, 100, grt.y ?? 21, '%', `外设件改('greeting','y',this.value,this)`)}
+          ${外设微调HTML('左右', 0, 100, grt.x ?? 50, '%', `外设件改('greeting','x',this.value,this)`)}
+          ${外设微调HTML('大小', 10, 400, grt.size ?? 100, '%', `外设件改('greeting','size',this.value,this)`)}
         </div>
       </div>
     </div>`,
@@ -1052,9 +1066,9 @@ async function 设置_主题() {
           <input type="color" class="外设取色" value="${lun.color || '#ffffff'}" oninput="外设件改('lunar','color',this.value)" title="农历颜色">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${lun.y ?? 26}" oninput="外设件改('lunar','y',this.value,this)"><output>${lun.y ?? 26}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${lun.x ?? 50}" oninput="外设件改('lunar','x',this.value,this)"><output>${lun.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${lun.size ?? 100}" oninput="外设件改('lunar','size',this.value,this)"><output>${lun.size ?? 100}%</output></label>
+          ${外设微调HTML('上下', 0, 100, lun.y ?? 26, '%', `外设件改('lunar','y',this.value,this)`)}
+          ${外设微调HTML('左右', 0, 100, lun.x ?? 50, '%', `外设件改('lunar','x',this.value,this)`)}
+          ${外设微调HTML('大小', 10, 400, lun.size ?? 100, '%', `外设件改('lunar','size',this.value,this)`)}
         </div>
       </div>
     </div>`,
@@ -1067,8 +1081,8 @@ async function 设置_主题() {
   ].join(''));
 
   const 高级面板 = 面板('adv', [
-    外设行HTML('自定义 CSS', '绝对优先覆盖前面所有外观设置。<br>可用类名：.背景遮罩 .双线头部 .双线英 .双线副 .登录卡 .输入盒 .登录钮 .备案底栏（也可用 ::before / ::after 伪元素添加文字）',
-      `<textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线头部::after { content: 'WELCOME'; display: block; margin-top: 8px; font-size: 11px; letter-spacing: .3em; }">${转义(c.customCss || '')}</textarea>`, '顶对齐'),
+    外设行HTML('自定义 CSS', '绝对优先覆盖，支持 ::before/::after 加字',
+      `<textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }">${转义(c.customCss || '')}</textarea>`, '顶对齐'),
   ].join(''));
 
   return `
