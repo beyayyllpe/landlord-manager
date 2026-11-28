@@ -2764,18 +2764,15 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设文增钮 {
   width: 100%;
   margin-top: 10px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   border: 1.5px dashed var(--border);
   border-radius: 10px;
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   cursor: pointer;
   transition: border-color .15s, color .15s, background .15s;
 }
@@ -2785,15 +2782,15 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   background: var(--surface-muted);
 }
 .外设文增标 {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--surface-subtle);
   color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
 }
 .外设文格 {

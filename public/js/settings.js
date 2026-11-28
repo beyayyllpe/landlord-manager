@@ -797,19 +797,14 @@ async function 设置_主题() {
        <button type="button" class="外设小钮" onclick="外设调色('logoTint','#ffffff')">纯白</button>
        <button type="button" class="外设小钮" onclick="外设调色('logoTint','#1f2329')">深黑</button>
        <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原</button>`),
-    外设行HTML('Logo 描边', '',
-      `${外设取色HTML('logoStrokeColor', c.logoStrokeColor || '#000000', '描边颜色')}
-       ${外设滑块HTML('logoStroke', 0, 4, 0.5, c.logoStroke || 0)}`),
-    外设行HTML('Logo 阴影', '',
-      外设滑块HTML('logoShadow', 0, 28, 1, c.logoShadow ?? 10)),
     外设行HTML('Logo 大小', '',
       外设滑块HTML('logoSize', 40, 250, 1, c.logoSize)),
     外设行HTML('标题位置', '距离顶部的百分比',
       外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
 
-    外设分组HTML('自由文字'),
+    外设分组HTML('添加文字'),
     `<div id="外设自由文字列表">${外设自由文字HTML(c.texts)}</div>`,
-    `<button type="button" class="外设文增钮" onclick="外设文增()"><span class="外设文增标">＋</span><span>添加一行文字</span></button>`,
+    `<button type="button" class="外设文增钮" onclick="外设文增()" title="添加文字"><span class="外设文增标">＋</span></button>`,
   ].join(''));
 
   const 表单面板 = 面板('form', [
