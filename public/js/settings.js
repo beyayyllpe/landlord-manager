@@ -746,8 +746,6 @@ async function 设置_主题() {
       外设分段HTML('bgFit', [['fill', '铺满裁切'], ['fit', '完整显示']], c.bgFit)),
     外设行HTML('遮罩强度', '压暗背景，提升文字可读性',
       外设滑块HTML('overlay', 0, 80, 1, c.overlay)),
-    外设行HTML('自动对比度', '依据背景明暗微调文字',
-      外设开关HTML('autoContrast', c.autoContrast)),
   ].join(''));
 
   const 标题面板 = 面板('title', [
