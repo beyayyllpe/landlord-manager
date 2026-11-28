@@ -257,15 +257,16 @@ let 外设图版本 = Date.now();
 function 默认外观配置() {
   return {
     theme: 主题 || '跟随系统',
+    compact: false,
+    reduceMotion: false,
+    cardRadius: 12,
+    fontScale: 100,
     bgFit: 'fill',
     overlay: 35,
     blur: 10,
     autoContrast: true,
     logoSize: 100,
     logoTint: '',
-    logoStroke: 0,
-    logoStrokeColor: '#000000',
-    logoShadow: 10,
     titleY: 24,
     formY: 62,
     formStyle: 'glass',
@@ -274,20 +275,17 @@ function 默认外观配置() {
     btnText: '登 录',
     textColor: '#ffffff',
     textWeight: '500',
-    textStroke: 0,
-    textStrokeColor: '#000000',
     textShadow: 8,
     texts: [
       { text: 'Rental Keeper', line: true, color: '#ffffff', y: 34, x: 50, size: 13, tracking: 42 },
       { text: 'Property · Billing · Occupancy', line: false, color: '#ffffff', y: 39, x: 50, size: 12, tracking: 18 }
     ],
+    dividers: [],
     widgets: {
-      clock: { on: false, color: '#ffffff', y: 14, x: 50, size: 100 },
-      greeting: { on: false, color: '#ffffff', y: 21, x: 50, size: 100 },
-      lunar: { on: false, color: '#ffffff', y: 26, x: 50, size: 100 },
-      divider: { on: false, color: '#ffffff', y: 45, x: 50, size: 100 }
+      clock: { on: false, style: 'digit', color: '#ffffff', y: 14, x: 50, size: 100 },
+      greeting: { on: false, custom: '', color: '#ffffff', y: 21, x: 50, size: 100 },
+      lunar: { mode: 'hide', solarTerm: true, color: '#ffffff', y: 26, x: 50, size: 100 }
     },
-    showFoot: true,
     customCss: ''
   };
 }
@@ -302,8 +300,17 @@ function 读外观配置() {
   return Object.assign(默认外观配置(), 深拷贝外观(saved));
 }
 
-function 应用全局外观() {
-  // 全局主题由 应用主题() 负责，明亮=黑底白字，暗黑=白底黑字
+function 应用全局外观(cfg) {
+  const c = Object.assign(默认外观配置(), cfg || 读外观配置());
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  if (root && root.style && typeof root.style.setProperty === 'function') {
+    root.style.setProperty('--app-radius', `${c.cardRadius ?? 12}px`);
+    root.style.zoom = ((Number(c.fontScale) || 100) / 100).toFixed(2);
+  }
+  if (typeof document !== 'undefined' && document.body && document.body.classList) {
+    document.body.classList.toggle('compact', Boolean(c.compact));
+    document.body.classList.toggle('still', Boolean(c.reduceMotion));
+  }
 }
 
 function 外设是否未保存() {
@@ -445,6 +452,18 @@ function 渲染预览舞台到(后缀) {
     }).join('');
   }
 
+function 计算节气(d) {
+  const names = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  const c = [5.4055,20.12,3.87,18.73,5.63,20.646,4.81,20.1,5.52,21.04,5.678,21.37,7.108,22.83,7.5,23.13,7.646,23.042,8.318,23.438,7.438,22.36,7.18,21.94];
+  const idx1 = m * 2, idx2 = m * 2 + 1;
+  const d1 = Math.floor((y % 100) * 0.2422 + c[idx1]) - Math.floor((y % 100 - 1) / 4);
+  const d2 = Math.floor((y % 100) * 0.2422 + c[idx2]) - Math.floor((y % 100 - 1) / 4);
+  if (day === d1) return names[idx1];
+  if (day === d2) return names[idx2];
+  return '';
+}
+
   const widgetLayer = document.getElementById('外设预览控件层' + 后缀);
   if (widgetLayer) {
     const ws = (c.widgets && typeof c.widgets === 'object') ? c.widgets : {};
@@ -453,18 +472,38 @@ function 渲染预览舞台到(后缀) {
     const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][now.getDay()];
     const dateStr = `${now.getMonth() + 1}月${now.getDate()}日 · ${week}`;
     const h = now.getHours();
-    const greet = h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
+    const defGreet = h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
     let lunarStr = '';
-    try { lunarStr = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).format(now); } catch (e) {}
-    widgetLayer.innerHTML = Object.entries(ws).map(([k, v]) => {
-      if (!v || !v.on) return '';
-      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 20)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
-      if (k === 'clock') return `<div class="外设预览控件 控件-clock 登录控件 登录控件-clock" style="${sty}"><div class="时">${hm}</div><div class="期">${dateStr}</div></div>`;
-      if (k === 'greeting') return `<div class="外设预览控件 控件-greeting 登录控件 登录控件-greeting" style="${sty}">${greet}</div>`;
-      if (k === 'lunar') return `<div class="外设预览控件 控件-lunar 登录控件 登录控件-lunar" style="${sty}">农历 ${lunarStr}</div>`;
-      if (k === 'divider') return `<div class="外设预览控件 控件-divider 登录控件 登录控件-divider" style="${sty}"></div>`;
-      return '';
-    }).join('');
+    try {
+      const opt = (ws.lunar && ws.lunar.mode === 'date') ? { day: 'numeric' } : { month: 'long', day: 'numeric' };
+      lunarStr = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', opt).format(now);
+    } catch (e) {}
+    const jq = (ws.lunar && ws.lunar.solarTerm !== false) ? 计算节气(now) : '';
+    const htmls = [];
+    if (ws.clock && ws.clock.on) {
+      const v = ws.clock;
+      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 14)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
+      htmls.push(`<div class="外设预览控件 控件-clock 样式-${v.style || 'digit'} 登录控件 登录控件-clock" style="${sty}"><div class="时">${hm}</div><div class="期">${dateStr}</div></div>`);
+    }
+    if (ws.greeting && ws.greeting.on) {
+      const v = ws.greeting;
+      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 21)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
+      htmls.push(`<div class="外设预览控件 控件-greeting 登录控件 登录控件-greeting" style="${sty}">${转义((v.custom || '').trim() || defGreet)}</div>`);
+    }
+    if (ws.lunar && ws.lunar.mode && ws.lunar.mode !== 'hide') {
+      const v = ws.lunar;
+      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 26)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
+      const txt = (v.mode === 'date' ? lunarStr : `农历 ${lunarStr}`) + (jq ? ` · ${jq}` : '');
+      htmls.push(`<div class="外设预览控件 控件-lunar 登录控件 登录控件-lunar" style="${sty}">${txt}</div>`);
+    }
+    const divs = Array.isArray(c.dividers) ? c.dividers : [];
+    divs.forEach((d, idx) => {
+      if (!d) return;
+      const op = ((Number(d.opacity ?? 45)) / 100).toFixed(2);
+      const sty = `left:${Number(d.x ?? 50)}%;top:${Number(d.y ?? 45)}%;transform:translate(-50%,-50%) scaleX(${(Number(d.size)||100)/100});color:${d.color || '#ffffff'};opacity:${op};border-top-style:${d.style || 'solid'};`;
+      htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${sty}"></div>`);
+    });
+    widgetLayer.innerHTML = htmls.join('');
   }
 
   const formBox = document.getElementById('外设预览表单' + 后缀);
@@ -577,17 +616,18 @@ function 外设滑(键, 值) {
   外设草稿[键] = Number(值);
   const lab = document.getElementById(`外设值_${键}`);
   if (lab) {
-    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius'].includes(键)) lab.textContent = `${值}px`;
+    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius', 'cardRadius'].includes(键)) lab.textContent = `${值}px`;
     else if (键 === 'subTracking') lab.textContent = `${(Number(值) / 100).toFixed(2)}em`;
     else lab.textContent = `${值}%`;
   }
+  if (['cardRadius', 'fontScale'].includes(键)) 应用全局外观(外设草稿);
   更新外设预览();
 }
 
 function 外设开(键, checked) {
   if (!外设草稿) return;
   外设草稿[键] = Boolean(checked);
-  if (键 === 'reduceMotion') 应用全局外观(外设草稿);
+  if (['compact', 'reduceMotion'].includes(键)) 应用全局外观(外设草稿);
   更新外设预览();
 }
 
@@ -678,25 +718,28 @@ const 外设标签列表 = [
   ['adv', '高级'],
 ];
 
-const 外设控件元数据 = [
-  ['clock', '实时时钟', '当前时间与日期星期'],
-  ['greeting', '时段问候', '早安 / 午安 / 傍晚好 / 夜深了'],
-  ['lunar', '今日农历', '自动显示农历月日'],
-  ['divider', '装饰细线', '极简半透明横向分割线']
-];
-
 function 外设件改(k, 键, 值, el) {
   if (!外设草稿) return;
   if (!外设草稿.widgets || typeof 外设草稿.widgets !== 'object') {
     外设草稿.widgets = 深拷贝外观(默认外观配置().widgets);
   }
-  const item = 外设草稿.widgets[k] || (外设草稿.widgets[k] = { on: false, color: '#ffffff', y: 20, x: 50, size: 100 });
-  if (键 === 'on') {
-    item.on = Boolean(值);
-    const body = document.getElementById(`外设件体_${k}`);
-    if (body) body.hidden = !item.on;
-  } else if (键 === 'color') {
-    item.color = String(值);
+  const item = 外设草稿.widgets[k] || (外设草稿.widgets[k] = {});
+  if (['on', 'solarTerm'].includes(键)) {
+    item[键] = Boolean(值);
+    if (键 === 'on') {
+      const body = document.getElementById(`外设件体_${k}`);
+      if (body) body.hidden = !item.on;
+    }
+  } else if (['color', 'custom', 'style', 'mode'].includes(键)) {
+    item[键] = String(值);
+    if (el && el.parentElement && ['style', 'mode'].includes(键)) {
+      Array.from(el.parentElement.children).forEach(b => b.classList.remove('选中'));
+      el.classList.add('选中');
+    }
+    if (键 === 'mode') {
+      const body = document.getElementById(`外设件体_${k}`);
+      if (body) body.hidden = 值 === 'hide';
+    }
   } else {
     item[键] = Number(值);
     if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
@@ -706,8 +749,74 @@ function 外设件改(k, 键, 值, el) {
   更新外设预览();
 }
 
+function 外设线HTML(list) {
+  return (Array.isArray(list) ? list : []).map((d, i) => `
+    <div class="外设文卡">
+      <div class="外设文头" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="color" class="外设取色" value="${d.color || '#ffffff'}" oninput="外设线改(${i},'color',this.value)" title="细线颜色">
+          <div class="外设分段">${[['solid','实线'],['dashed','虚线'],['dotted','点线']].map(([v, t]) =>
+            `<button type="button" class="外设分段钮 ${(d.style || 'solid') === v ? '选中' : ''}" onclick="外设线改(${i},'style','${v}',this)">${t}</button>`
+          ).join('')}</div>
+        </div>
+        <button type="button" class="外设小钮 危" onclick="外设线删(${i})">删除</button>
+      </div>
+      <div class="外设文格">
+        <label class="外设文项"><span>透明</span><input type="range" min="0" max="100" value="${d.opacity ?? 45}" oninput="外设线改(${i},'opacity',this.value,this)"><output>${d.opacity ?? 45}%</output></label>
+        <label class="外设文项"><span>长度</span><input type="range" min="30" max="200" value="${d.size ?? 100}" oninput="外设线改(${i},'size',this.value,this)"><output>${d.size ?? 100}%</output></label>
+        <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${d.y ?? 45}" oninput="外设线改(${i},'y',this.value,this)"><output>${d.y ?? 45}%</output></label>
+        <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${d.x ?? 50}" oninput="外设线改(${i},'x',this.value,this)"><output>${d.x ?? 50}%</output></label>
+      </div>
+    </div>`).join('');
+}
+
+function 刷新装饰线列表() {
+  const box = document.getElementById('外设装饰线列表');
+  if (box && 外设草稿) box.innerHTML = 外设线HTML(外设草稿.dividers);
+  更新外设预览();
+}
+
+function 外设线改(i, 键, 值, el) {
+  if (!外设草稿 || !Array.isArray(外设草稿.dividers) || !外设草稿.dividers[i]) return;
+  const item = 外设草稿.dividers[i];
+  if (['color', 'style'].includes(键)) {
+    item[键] = String(值);
+    if (键 === 'style' && el && el.parentElement) {
+      Array.from(el.parentElement.children).forEach(b => b.classList.remove('选中'));
+      el.classList.add('选中');
+    }
+  } else {
+    item[键] = Number(值);
+    if (el && el.nextElementSibling && el.nextElementSibling.tagName === 'OUTPUT') {
+      el.nextElementSibling.textContent = `${值}%`;
+    }
+  }
+  更新外设预览();
+}
+
+function 外设线增() {
+  if (!外设草稿) return;
+  if (!Array.isArray(外设草稿.dividers)) 外设草稿.dividers = [];
+  const last = 外设草稿.dividers[外设草稿.dividers.length - 1] || { style: 'solid', opacity: 45, color: '#ffffff', y: 45, x: 50, size: 100 };
+  外设草稿.dividers.push({
+    style: last.style || 'solid',
+    opacity: Number(last.opacity ?? 45),
+    color: last.color || '#ffffff',
+    y: Math.min(88, (Number(last.y) || 45) + 8),
+    x: Number(last.x ?? 50),
+    size: Number(last.size || 100)
+  });
+  刷新装饰线列表();
+}
+
+function 外设线删(i) {
+  if (!外设草稿 || !Array.isArray(外设草稿.dividers)) return;
+  外设草稿.dividers.splice(i, 1);
+  刷新装饰线列表();
+}
+
 function 外设显示值(键, 值) {
-  if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius'].includes(键)) return `${值}px`;
+  if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius', 'cardRadius'].includes(键)) return `${值}px`;
   if (键 === 'subTracking') return `${(Number(值) / 100).toFixed(2)}em`;
   return `${值}%`;
 }
@@ -833,6 +942,14 @@ async function 设置_主题() {
   const 外观面板 = 面板('look', [
     外设行HTML('主题模式', '明亮黑底白字 / 暗黑模式白底黑字，本设备独立记忆',
       外设分段HTML('theme', [['明亮', '明亮'], ['暗黑', '暗黑'], ['跟随系统', '跟随系统']], c.theme)),
+    外设行HTML('紧凑模式', '减少卡片内边距，适合小屏或信息多的页面',
+      外设开关HTML('compact', c.compact)),
+    外设行HTML('减少动效', '关掉过渡和动画，对动效敏感的人会更舒服',
+      外设开关HTML('reduceMotion', c.reduceMotion)),
+    外设行HTML('卡片圆角', '全局统一调整',
+      外设滑块HTML('cardRadius', 0, 20, 1, c.cardRadius ?? 12)),
+    外设行HTML('界面字号缩放', '照顾不同分辨率屏幕',
+      外设滑块HTML('fontScale', 90, 120, 2, c.fontScale ?? 100)),
   ].join(''));
 
   const 背景面板 = 面板('bg', [
@@ -861,10 +978,6 @@ async function 设置_主题() {
       外设滑块HTML('logoSize', 40, 250, 1, c.logoSize)),
     外设行HTML('Logo 位置', '距离顶部的百分比',
       外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
-
-    外设分组HTML('添加文字'),
-    `<div id="外设自由文字列表">${外设自由文字HTML(c.texts)}</div>`,
-    `<button type="button" class="外设文增钮" onclick="外设文增()" title="添加文字"><span class="外设文增标">＋</span></button>`,
   ].join(''));
 
   const 表单面板 = 面板('form', [
@@ -882,27 +995,75 @@ async function 设置_主题() {
       `<input type="text" class="外设输入框" value="${转义(c.btnText || '登 录')}" maxlength="20" oninput="外设字('btnText',this.value)" placeholder="登 录">`),
   ].join(''));
 
-  const 控件面板 = 面板('widget', 外设控件元数据.map(([k, 名, 述]) => {
-    const w = (c.widgets && c.widgets[k]) || { on: false, color: '#ffffff', y: 20, x: 50, size: 100 };
-    return `
-      <div class="外设文卡" style="margin-top:0;margin-bottom:10px">
-        <div class="外设文头" style="justify-content:space-between">
-          <div><b style="font-size:13.5px">${名}</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">${述}</small></div>
-          <label class="外设开关"><input type="checkbox" ${w.on ? 'checked' : ''} onchange="外设件改('${k}','on',this.checked)"><span class="外设开关轨"></span></label>
+  const ws = c.widgets;
+  const clk = ws.clock || { on: false, style: 'digit', color: '#ffffff', y: 14, x: 50, size: 100 };
+  const grt = ws.greeting || { on: false, custom: '', color: '#ffffff', y: 21, x: 50, size: 100 };
+  const lun = ws.lunar || { mode: 'hide', solarTerm: true, color: '#ffffff', y: 26, x: 50, size: 100 };
+  const 控件面板 = 面板('widget', [
+    `<div class="外设文卡" style="margin-top:0;margin-bottom:10px">
+      <div class="外设文头" style="justify-content:space-between">
+        <div><b style="font-size:13.5px">实时时钟</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">数字 / 大字 / 极简三选一</small></div>
+        <label class="外设开关"><input type="checkbox" ${clk.on ? 'checked' : ''} onchange="外设件改('clock','on',this.checked)"><span class="外设开关轨"></span></label>
+      </div>
+      <div id="外设件体_clock" ${clk.on ? '' : 'hidden'} style="padding-top:8px;border-top:1px dashed var(--border)">
+        <div class="外设文头" style="margin-bottom:8px;justify-content:space-between">
+          <div class="外设分段">${[['digit','数字'],['big','大字'],['mini','极简']].map(([v, t]) =>
+            `<button type="button" class="外设分段钮 ${(clk.style || 'digit') === v ? '选中' : ''}" onclick="外设件改('clock','style','${v}',this)">${t}</button>`
+          ).join('')}</div>
+          <input type="color" class="外设取色" value="${clk.color || '#ffffff'}" oninput="外设件改('clock','color',this.value)" title="时钟颜色">
         </div>
-        <div id="外设件体_${k}" ${w.on ? '' : 'hidden'} style="padding-top:6px;border-top:1px dashed var(--border)">
-          <div class="外设文头" style="margin-bottom:6px">
-            <span style="font-size:12px;color:var(--ink-2)">颜色</span>
-            <input type="color" class="外设取色" value="${w.color || '#ffffff'}" oninput="外设件改('${k}','color',this.value)" title="${名}颜色">
-          </div>
-          <div class="外设文格">
-            <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${w.y ?? 20}" oninput="外设件改('${k}','y',this.value,this)"><output>${w.y ?? 20}%</output></label>
-            <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${w.x ?? 50}" oninput="外设件改('${k}','x',this.value,this)"><output>${w.x ?? 50}%</output></label>
-            <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${w.size ?? 100}" oninput="外设件改('${k}','size',this.value,this)"><output>${w.size ?? 100}%</output></label>
-          </div>
+        <div class="外设文格">
+          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${clk.y ?? 14}" oninput="外设件改('clock','y',this.value,this)"><output>${clk.y ?? 14}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${clk.x ?? 50}" oninput="外设件改('clock','x',this.value,this)"><output>${clk.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${clk.size ?? 100}" oninput="外设件改('clock','size',this.value,this)"><output>${clk.size ?? 100}%</output></label>
         </div>
-      </div>`;
-  }).join(''));
+      </div>
+    </div>`,
+    `<div class="外设文卡" style="margin-top:0;margin-bottom:10px">
+      <div class="外设文头" style="justify-content:space-between">
+        <div><b style="font-size:13.5px">时段问候</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">留空自动显示早/午/晚安</small></div>
+        <label class="外设开关"><input type="checkbox" ${grt.on ? 'checked' : ''} onchange="外设件改('greeting','on',this.checked)"><span class="外设开关轨"></span></label>
+      </div>
+      <div id="外设件体_greeting" ${grt.on ? '' : 'hidden'} style="padding-top:8px;border-top:1px dashed var(--border)">
+        <div class="外设文头" style="margin-bottom:8px">
+          <input type="color" class="外设取色" value="${grt.color || '#ffffff'}" oninput="外设件改('greeting','color',this.value)" title="问候语颜色">
+          <input type="text" class="外设输入框" value="${转义(grt.custom || '')}" maxlength="40" oninput="外设件改('greeting','custom',this.value)" placeholder="自定义问候语（留空使用默认）">
+        </div>
+        <div class="外设文格">
+          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${grt.y ?? 21}" oninput="外设件改('greeting','y',this.value,this)"><output>${grt.y ?? 21}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${grt.x ?? 50}" oninput="外设件改('greeting','x',this.value,this)"><output>${grt.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${grt.size ?? 100}" oninput="外设件改('greeting','size',this.value,this)"><output>${grt.size ?? 100}%</output></label>
+        </div>
+      </div>
+    </div>`,
+    `<div class="外设文卡" style="margin-top:0;margin-bottom:10px">
+      <div class="外设文头" style="justify-content:space-between">
+        <div><b style="font-size:13.5px">今日农历</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">完整农历 / 仅日期 / 隐藏</small></div>
+        <div class="外设分段">${[['full','完整农历'],['date','仅日期'],['hide','隐藏']].map(([v, t]) =>
+          `<button type="button" class="外设分段钮 ${(lun.mode || 'hide') === v ? '选中' : ''}" onclick="外设件改('lunar','mode','${v}',this)">${t}</button>`
+        ).join('')}</div>
+      </div>
+      <div id="外设件体_lunar" ${(lun.mode && lun.mode !== 'hide') ? '' : 'hidden'} style="padding-top:8px;border-top:1px dashed var(--border)">
+        <div class="外设文头" style="margin-bottom:8px;justify-content:space-between">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer">
+            <input type="checkbox" ${lun.solarTerm !== false ? 'checked' : ''} onchange="外设件改('lunar','solarTerm',this.checked)">显示节气
+          </label>
+          <input type="color" class="外设取色" value="${lun.color || '#ffffff'}" oninput="外设件改('lunar','color',this.value)" title="农历颜色">
+        </div>
+        <div class="外设文格">
+          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${lun.y ?? 26}" oninput="外设件改('lunar','y',this.value,this)"><output>${lun.y ?? 26}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${lun.x ?? 50}" oninput="外设件改('lunar','x',this.value,this)"><output>${lun.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${lun.size ?? 100}" oninput="外设件改('lunar','size',this.value,this)"><output>${lun.size ?? 100}%</output></label>
+        </div>
+      </div>
+    </div>`,
+    外设分组HTML('装饰细线'),
+    `<div id="外设装饰线列表">${外设线HTML(c.dividers)}</div>`,
+    `<button type="button" class="外设文增钮" onclick="外设线增()" title="添加装饰细线"><span class="外设文增标">＋</span></button>`,
+    外设分组HTML('添加文字'),
+    `<div id="外设自由文字列表">${外设自由文字HTML(c.texts)}</div>`,
+    `<button type="button" class="外设文增钮" onclick="外设文增()" title="添加文字"><span class="外设文增标">＋</span></button>`,
+  ].join(''));
 
   const 高级面板 = 面板('adv', [
     外设行HTML('自定义 CSS', '绝对优先覆盖前面所有外观设置。<br>可用类名：.背景遮罩 .双线头部 .双线英 .双线副 .登录卡 .输入盒 .登录钮 .备案底栏（也可用 ::before / ::after 伪元素添加文字）',

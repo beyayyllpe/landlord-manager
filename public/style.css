@@ -2635,6 +2635,13 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 :root {
   --app-radius: 12px;
 }
+body.compact .卡片, body.compact .外设面板 { padding: 11px 14px; }
+body.compact th, body.compact td { padding: 7px 11px; }
+body.compact .外设行 { padding: 6px 0; }
+body.still *, body.still *::before, body.still *::after {
+  transition: none !important;
+  animation: none !important;
+}
 
 .备份提醒条 {
   margin-bottom: 12px;
@@ -2811,9 +2818,12 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 }
 .外设预览控件.控件-clock .时 { font-size: 38px; font-weight: 300; letter-spacing: .06em; line-height: 1.05; }
 .外设预览控件.控件-clock .期 { font-size: 12px; opacity: .82; letter-spacing: .16em; margin-top: 4px; }
+.外设预览控件.控件-clock.样式-big .时 { font-size: 56px; font-weight: 600; letter-spacing: .04em; }
+.外设预览控件.控件-clock.样式-mini .时 { font-size: 20px; font-weight: 500; letter-spacing: .14em; }
+.外设预览控件.控件-clock.样式-mini .期 { display: none; }
 .外设预览控件.控件-greeting { font-size: 15px; font-weight: 500; letter-spacing: .18em; }
 .外设预览控件.控件-lunar { font-size: 13px; letter-spacing: .22em; opacity: .88; }
-.外设预览控件.控件-divider { width: 220px; height: 1px; background: currentColor; opacity: .45; }
+.外设预览控件.控件-divider { width: 220px; height: 0; border-top: 1px solid currentColor; }
 .外设预览文项 {
   position: absolute;
   transform: translate(-50%, -50%);

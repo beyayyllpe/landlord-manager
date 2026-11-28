@@ -1091,17 +1091,18 @@ app.post('/api/settings', (req, res) => {
   if ('外观' in 补丁) {
     if (补丁.外观 && typeof 补丁.外观 === 'object' && !Array.isArray(补丁.外观)) {
       const 允许 = [
-        'theme','bgFit','overlay','blur','autoContrast',
-        'logoSize','logoTint','logoStroke','logoStrokeColor','logoShadow',
-        'titleY','formY','formStyle','formWidth','inputRadius','btnText',
-        'textColor','textWeight','textStroke','textStrokeColor','textShadow',
-        'texts','widgets','showFoot','customCss'
+        'theme','compact','reduceMotion','cardRadius','fontScale',
+        'bgFit','overlay','blur','autoContrast',
+        'logoSize','logoTint','titleY','formY','formStyle','formWidth','inputRadius','btnText',
+        'textColor','textWeight','textShadow',
+        'texts','dividers','widgets','customCss'
       ];
       const 净 = {};
       for (const k of 允许) {
         if (k in 补丁.外观) 净[k] = 补丁.外观[k];
       }
       if (Array.isArray(净.texts)) 净.texts = 净.texts.slice(0, 10);
+      if (Array.isArray(净.dividers)) 净.dividers = 净.dividers.slice(0, 10);
       补丁.外观 = 净;
     } else {
       delete 补丁.外观;

@@ -670,7 +670,7 @@
               body.有背景 .输入盒 input::placeholder { color: ${tc}; opacity: .72; }
             `);
           }
-          if (wg.widgets && typeof wg.widgets === 'object') {
+          if ((wg.widgets && typeof wg.widgets === 'object') || (Array.isArray(wg.dividers) && wg.dividers.length)) {
             let wLayer = document.getElementById('自定义控件层');
             if (!wLayer) {
               wLayer = document.createElement('div');
@@ -678,33 +678,66 @@
               wLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2;';
               document.body.appendChild(wLayer);
             }
-            const 算农历 = () => {
+            const 算节气 = d => {
+              const names = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+              const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+              const c = [5.4055,20.12,3.87,18.73,5.63,20.646,4.81,20.1,5.52,21.04,5.678,21.37,7.108,22.83,7.5,23.13,7.646,23.042,8.318,23.438,7.438,22.36,7.18,21.94];
+              const d1 = Math.floor((y % 100) * 0.2422 + c[m * 2]) - Math.floor((y % 100 - 1) / 4);
+              const d2 = Math.floor((y % 100) * 0.2422 + c[m * 2 + 1]) - Math.floor((y % 100 - 1) / 4);
+              if (day === d1) return names[m * 2];
+              if (day === d2) return names[m * 2 + 1];
+              return '';
+            };
+            const now = new Date();
+            const 算农历 = mode => {
               try {
-                return new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).format(new Date());
+                const opt = mode === 'date' ? { day: 'numeric' } : { month: 'long', day: 'numeric' };
+                return new Intl.DateTimeFormat('zh-CN-u-ca-chinese', opt).format(now);
               } catch (e) { return ''; }
             };
             const 算问候 = h => h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
             const 控件HTML = [];
-            const ws = wg.widgets;
-            for (const [k, v] of Object.entries(ws)) {
-              if (!v || !v.on) continue;
-              const col = v.color || '#ffffff';
+            const ws = wg.widgets || {};
+            if (ws.clock && ws.clock.on) {
+              const v = ws.clock;
               const sc = (Number(v.size) || 100) / 100;
-              baseCss.push(`.登录控件-${k} { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 20)}%; transform:translate(-50%,-50%) scale(${sc}); color:${col}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
-              if (k === 'clock') 控件HTML.push(`<div class="登录控件 登录控件-clock"><div id="登录时钟时" style="font-size:38px;font-weight:300;letter-spacing:.06em;line-height:1.05"></div><div id="登录时钟期" style="font-size:12px;opacity:.82;letter-spacing:.16em;margin-top:4px"></div></div>`);
-              else if (k === 'greeting') 控件HTML.push(`<div class="登录控件 登录控件-greeting" id="登录问候语" style="font-size:15px;font-weight:500;letter-spacing:.18em">${算问候(new Date().getHours())}</div>`);
-              else if (k === 'lunar') 控件HTML.push(`<div class="登录控件 登录控件-lunar" style="font-size:13px;letter-spacing:.22em;opacity:.88">农历 ${算农历()}</div>`);
-              else if (k === 'divider') 控件HTML.push(`<div class="登录控件 登录控件-divider" style="width:220px;height:1px;background:currentColor;opacity:.45"></div>`);
+              baseCss.push(`.登录控件-clock { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 14)}%; transform:translate(-50%,-50%) scale(${sc}); color:${v.color || '#ffffff'}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
+              const sz = v.style === 'big' ? '56px;font-weight:600' : (v.style === 'mini' ? '20px;font-weight:500;letter-spacing:.14em' : '38px;font-weight:300;letter-spacing:.06em');
+              const showDate = v.style !== 'mini';
+              控件HTML.push(`<div class="登录控件 登录控件-clock"><div id="登录时钟时" style="font-size:${sz};line-height:1.05"></div>${showDate ? '<div id="登录时钟期" style="font-size:12px;opacity:.82;letter-spacing:.16em;margin-top:4px"></div>' : ''}</div>`);
             }
+            if (ws.greeting && ws.greeting.on) {
+              const v = ws.greeting;
+              const sc = (Number(v.size) || 100) / 100;
+              baseCss.push(`.登录控件-greeting { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 21)}%; transform:translate(-50%,-50%) scale(${sc}); color:${v.color || '#ffffff'}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
+              const txt = String(v.custom || '').trim() || 算问候(now.getHours());
+              控件HTML.push(`<div class="登录控件 登录控件-greeting" style="font-size:15px;font-weight:500;letter-spacing:.18em">${txt}</div>`);
+            }
+            if (ws.lunar && ws.lunar.mode && ws.lunar.mode !== 'hide') {
+              const v = ws.lunar;
+              const sc = (Number(v.size) || 100) / 100;
+              baseCss.push(`.登录控件-lunar { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 26)}%; transform:translate(-50%,-50%) scale(${sc}); color:${v.color || '#ffffff'}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
+              const jq = v.solarTerm !== false ? 算节气(now) : '';
+              const txt = (v.mode === 'date' ? 算农历('date') : `农历 ${算农历('full')}`) + (jq ? ` · ${jq}` : '');
+              控件HTML.push(`<div class="登录控件 登录控件-lunar" style="font-size:13px;letter-spacing:.22em;opacity:.88">${txt}</div>`);
+            }
+            const divs = Array.isArray(wg.dividers) ? wg.dividers : [];
+            divs.forEach((d, idx) => {
+              if (!d) return;
+              const sc = (Number(d.size) || 100) / 100;
+              const op = ((Number(d.opacity ?? 45)) / 100).toFixed(2);
+              baseCss.push(`.登录控件-divider-${idx} { position:fixed; left:${Number(d.x ?? 50)}%; top:${Number(d.y ?? 45)}%; transform:translate(-50%,-50%) scaleX(${sc}); color:${d.color || '#ffffff'}; opacity:${op}; width:220px; height:0; border-top:1px ${d.style || 'solid'} currentColor; }`);
+              控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"></div>`);
+            });
             wLayer.innerHTML = 控件HTML.join('');
             const 刷时钟 = () => {
-              const now = new Date();
+              const cur = new Date();
               const tEl = document.getElementById('登录时钟时');
               const dEl = document.getElementById('登录时钟期');
-              if (tEl) tEl.textContent = now.toTimeString().slice(0, 5);
+              if (tEl) tEl.textContent = cur.toTimeString().slice(0, 5);
               if (dEl) {
-                const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][now.getDay()];
-                dEl.textContent = `${now.getMonth() + 1}月${now.getDate()}日 · ${week}`;
+                const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][cur.getDay()];
+                dEl.textContent = `${cur.getMonth() + 1}月${cur.getDate()}日 · ${week}`;
               }
             };
             if (ws.clock && ws.clock.on) { 刷时钟(); setInterval(刷时钟, 15000); }
