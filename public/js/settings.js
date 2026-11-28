@@ -272,6 +272,7 @@ function 默认外观配置() {
     formStyle: 'glass',
     textTone: 'auto',
     subtitle: 'Rental Keeper',
+    subDesc: 'Property · Billing · Occupancy',
     showSub: true,
     showFoot: true
   };
@@ -283,12 +284,23 @@ function 读外观配置() {
   return Object.assign(默认外观配置(), saved);
 }
 
+function 计算反白色(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 158 ? '#141414' : '#ffffff';
+}
+
 function 应用全局外观(cfg) {
   const c = Object.assign(默认外观配置(), cfg || 读外观配置());
   const root = typeof document !== 'undefined' ? document.documentElement : null;
   if (root && root.style && typeof root.style.setProperty === 'function') {
-    if (c.accent) root.style.setProperty('--accent', c.accent);
-    const radMap = { sharp: '6px', medium: '14px', round: '20px' };
+    if (c.accent) {
+      root.style.setProperty('--accent', c.accent);
+      root.style.setProperty('--accent-fg', 计算反白色(c.accent));
+    }
+    const radMap = { sharp: '4px', medium: '14px', round: '22px' };
     root.style.setProperty('--app-radius', radMap[c.radius] || '14px');
   }
   if (typeof document !== 'undefined' && document.body) {
@@ -313,8 +325,8 @@ function 更新外设状态条() {
   el.classList.toggle('脏', 脏);
 }
 
-function 更新外设预览() {
-  const stage = document.getElementById('外设预览舞台');
+function 渲染预览舞台到(后缀) {
+  const stage = document.getElementById('外设预览舞台' + 后缀);
   if (!stage || !外设草稿) return;
   const c = 外设草稿;
   const 是电脑 = 外设预览设备 === 'desktop';
@@ -325,8 +337,8 @@ function 更新外设预览() {
   const 底图地址 = 有底图
     ? `/api/login-bg?${(!是电脑 && 外设meta.mobileHasBg) ? 'target=mobile&' : ''}t=${外设图版本}`
     : '';
-  const imgMain = document.getElementById('外设预览底图');
-  const imgBlur = document.getElementById('外设预览底模糊');
+  const imgMain = document.getElementById('外设预览底图' + 后缀);
+  const imgBlur = document.getElementById('外设预览底模糊' + 后缀);
   if (imgMain && imgBlur) {
     if (底图地址) {
       if (imgMain.getAttribute('src') !== 底图地址) imgMain.src = 底图地址;
@@ -338,44 +350,104 @@ function 更新外设预览() {
     }
   }
 
-  const mask = document.getElementById('外设预览遮罩');
+  const mask = document.getElementById('外设预览遮罩' + 后缀);
   if (mask) mask.style.background = `rgba(10, 12, 14, ${(Number(c.overlay) || 0) / 100})`;
 
   const toneColor = c.textTone === 'dark' ? '#1f2329' : '#ffffff';
-  const titleBox = document.getElementById('外设预览标题区');
+  const titleBox = document.getElementById('外设预览标题区' + 后缀);
   if (titleBox) {
     titleBox.style.top = `${c.titleY}%`;
     titleBox.style.color = toneColor;
   }
-  const logoImg = document.getElementById('外设预览Logo');
+  const logoImg = document.getElementById('外设预览Logo' + 后缀);
   if (logoImg) {
     const scale = (Number(c.logoSize) || 100) / 100;
     logoImg.style.transform = `scale(${scale})`;
     logoImg.style.transformOrigin = 'center center';
   }
-  const subBox = document.getElementById('外设预览双线');
-  const subTxt = document.getElementById('外设预览双线字');
+  const subBox = document.getElementById('外设预览双线' + 后缀);
+  const subTxt = document.getElementById('外设预览双线字' + 后缀);
+  const subDesc = document.getElementById('外设预览标语' + 后缀);
   if (subBox) subBox.style.display = c.showSub ? 'flex' : 'none';
   if (subTxt) subTxt.textContent = (c.subtitle || 'Rental Keeper').trim() || 'Rental Keeper';
+  if (subDesc) {
+    subDesc.style.display = c.showSub ? 'block' : 'none';
+    subDesc.textContent = (c.subDesc || 'Property · Billing · Occupancy').trim() || 'Property · Billing · Occupancy';
+  }
 
-  const formBox = document.getElementById('外设预览表单');
+  const formBox = document.getElementById('外设预览表单' + 后缀);
   if (formBox) {
     formBox.style.top = `${c.formY}%`;
     formBox.className = `外设预览表单 样式-${c.formStyle || 'glass'}`;
-    formBox.style.backdropFilter = `blur(${Number(c.blur) || 0}px)`;
-    formBox.style.webkitBackdropFilter = `blur(${Number(c.blur) || 0}px)`;
+    formBox.style.backdropFilter = c.formStyle === 'glass' ? `blur(${Number(c.blur) || 0}px)` : 'none';
+    formBox.style.webkitBackdropFilter = c.formStyle === 'glass' ? `blur(${Number(c.blur) || 0}px)` : 'none';
     if (c.formStyle !== 'solid') formBox.style.color = toneColor;
     else formBox.style.color = '#1f2329';
   }
 
-  const foot = document.getElementById('外设预览备案');
+  const foot = document.getElementById('外设预览备案' + 后缀);
   if (foot) {
     foot.style.display = c.showFoot ? 'block' : 'none';
     foot.style.color = toneColor;
   }
+}
+
+function 更新外设预览() {
+  渲染预览舞台到('');
+  渲染预览舞台到('_大');
   const tip = document.getElementById('外设预览尺寸提示');
-  if (tip) tip.textContent = 是电脑 ? '16:10 桌面视图' : '9:16 手机视图';
+  if (tip) tip.textContent = 外设预览设备 === 'desktop' ? '16:10 桌面视图' : '9:16 手机视图';
   更新外设状态条();
+}
+
+function 外设调色(值) {
+  if (!外设草稿) return;
+  外设草稿.accent = 值;
+  应用全局外观(外设草稿);
+  更新外设预览();
+}
+
+function 外设放大预览() {
+  if (document.getElementById('外设放大遮罩')) return;
+  const c = 外设草稿 || 默认外观配置();
+  const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
+  const wrap = document.createElement('div');
+  wrap.id = '外设放大遮罩';
+  wrap.className = '外设放大遮罩';
+  wrap.onclick = e => { if (e.target === wrap) 关闭外设放大预览(); };
+  wrap.innerHTML = `
+    <div class="外设放大顶栏">
+      <div class="外设分段">
+        <button type="button" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone', true)">手机 9:16</button>
+        <button type="button" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop', true)">电脑 16:10</button>
+      </div>
+      <button type="button" class="btn 次" onclick="关闭外设放大预览()">关闭预览</button>
+    </div>
+    <div class="外设放大舞台盒">
+      <div class="外设预览舞台" id="外设预览舞台_大">
+        <img class="外设预览底模糊" id="外设预览底模糊_大" alt="">
+        <img class="外设预览底图" id="外设预览底图_大" alt="">
+        <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
+        <div class="外设预览标题区" id="外设预览标题区_大">
+          <img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图">
+          <div class="外设预览双线" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+          <div id="外设预览标语_大" style="font-size:8px;letter-spacing:.2em;opacity:.75;margin-top:4px;text-transform:uppercase">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+        </div>
+        <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单_大">
+          <div class="外设预览假框">账号 / Account</div>
+          <div class="外设预览假框">密码 / Password</div>
+          <div class="外设预览假钮">登 录</div>
+        </div>
+        <div class="外设预览备案" id="外设预览备案_大">备案号示例 · 租房管家</div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  更新外设预览();
+}
+
+function 关闭外设放大预览() {
+  const el = document.getElementById('外设放大遮罩');
+  if (el) el.remove();
 }
 
 function 外设选(键, 值) {
@@ -407,8 +479,12 @@ function 外设字(键, 值) {
   更新外设预览();
 }
 
-function 外设切预览(设备) {
+function 外设切预览(设备, 保持放大) {
   外设预览设备 = 设备 === 'desktop' ? 'desktop' : 'phone';
+  if (保持放大) {
+    关闭外设放大预览();
+    外设放大预览();
+  }
   渲染设置页();
 }
 
@@ -508,7 +584,7 @@ async function 设置_主题() {
             <div class="外设控件">
               <div class="外设色板">
                 ${外设强调色列表.map(col => `<button type="button" class="外设色点 ${c.accent === col ? '选中' : ''}" style="background:${col}" onclick="外设选('accent','${col}')" title="${col}"></button>`).join('')}
-                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设选('accent',this.value)" title="自定义颜色">
+                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设调色(this.value)" onchange="外设选('accent',this.value)" title="自定义颜色">
               </div>
             </div>
           </div>
@@ -619,6 +695,12 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
+            <div class="外设标签">英文小标语</div>
+            <div class="外设控件">
+              <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
+            </div>
+          </div>
+          <div class="外设行">
             <div class="外设标签">底部备案信息</div>
             <div class="外设控件">
               <label class="外设开关"><input type="checkbox" ${c.showFoot ? 'checked' : ''} onchange="外设开('showFoot',this.checked)"><span class="外设开关轨"></span></label>
@@ -631,18 +713,22 @@ async function 设置_主题() {
         <div class="外设预览卡">
           <div class="外设预览顶">
             <span>实时预览</span>
-            <div class="外设分段">
-              <button type="button" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
-              <button type="button" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="外设分段">
+                <button type="button" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
+                <button type="button" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
+              </div>
+              <button type="button" class="外设小钮" onclick="外设放大预览()">放大预览</button>
             </div>
           </div>
-          <div class="外设预览舞台" id="外设预览舞台">
+          <div class="外设预览舞台" id="外设预览舞台" ondblclick="外设放大预览()" title="双击可放大预览">
             <img class="外设预览底模糊" id="外设预览底模糊" alt="">
             <img class="外设预览底图" id="外设预览底图" alt="">
             <div class="外设预览遮罩" id="外设预览遮罩"></div>
             <div class="外设预览标题区" id="外设预览标题区">
               <img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图">
               <div class="外设预览双线" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+              <div id="外设预览标语" style="font-size:7px;letter-spacing:.18em;opacity:.76;margin-top:3px;text-transform:uppercase">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
             </div>
             <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单">
               <div class="外设预览假框">账号 / Account</div>

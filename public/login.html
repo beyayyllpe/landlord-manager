@@ -556,18 +556,48 @@
             const logo = document.getElementById('登录标题图');
             if (logo) logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
           }
+          if (typeof wg.titleY === 'number') {
+            const hd = document.querySelector('.双线头部');
+            if (hd) {
+              hd.style.position = 'fixed';
+              hd.style.left = '50%';
+              hd.style.top = wg.titleY + '%';
+              hd.style.transform = 'translate(-50%, -50%)';
+              hd.style.width = '100%';
+              hd.style.zIndex = '2';
+            }
+          }
+          if (typeof wg.formY === 'number') {
+            const card = document.querySelector('.登录卡');
+            if (card) {
+              card.style.position = 'fixed';
+              card.style.left = '50%';
+              card.style.top = wg.formY + '%';
+              card.style.transform = 'translate(-50%, -50%)';
+              card.style.zIndex = '2';
+            }
+          }
           if (wg.showSub === false) {
             const sub1 = document.querySelector('.双线英');
             const sub2 = document.querySelector('.双线副');
             if (sub1) sub1.style.display = 'none';
             if (sub2) sub2.style.display = 'none';
-          } else if (wg.subtitle) {
-            const subSpan = document.querySelector('.双线英 span');
-            if (subSpan) subSpan.textContent = String(wg.subtitle).trim();
+          } else {
+            if (wg.subtitle) {
+              const subSpan = document.querySelector('.双线英 span');
+              if (subSpan) subSpan.textContent = String(wg.subtitle).trim();
+            }
+            if (wg.subDesc) {
+              const subDescEl = document.querySelector('.双线副');
+              if (subDescEl) subDescEl.textContent = String(wg.subDesc).trim();
+            }
           }
           if (wg.formStyle === 'solid') document.body.classList.add('表单实色');
           else if (wg.formStyle === 'outline') document.body.classList.add('表单描边');
           if (wg.textTone === 'dark') document.body.classList.add('文字深色');
+          if (wg.autoContrast === false) {
+            document.documentElement.style.setProperty('--auto-shadow', 'none');
+          }
           if (wg.showFoot === false) {
             const f = document.getElementById('备案底栏');
             if (f) f.style.display = 'none';
