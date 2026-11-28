@@ -267,6 +267,7 @@ function 默认外观配置() {
     blur: 10,
     autoContrast: true,
     logoSize: 100,
+    logoTone: 'original',
     titleY: 28,
     formY: 62,
     formStyle: 'glass',
@@ -326,13 +327,19 @@ function 更新外设状态条() {
 }
 
 function 渲染预览舞台到(后缀) {
+  const shell = document.getElementById('外设预览壳' + 后缀);
   const stage = document.getElementById('外设预览舞台' + 后缀);
-  if (!stage || !外设草稿) return;
+  if (!shell || !stage || !外设草稿) return;
   const c = 外设草稿;
   const 是电脑 = 外设预览设备 === 'desktop';
   const 偏暗字 = c.textTone === 'dark';
+  shell.className = '外设预览壳' + (是电脑 ? ' 电脑' : '');
   stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '') + (偏暗字 ? ' 深色字' : '');
   stage.style.setProperty('--preview-accent', c.accent || '#18181b');
+
+  const 基准宽 = 是电脑 ? 1280 : 390;
+  const 壳宽 = shell.clientWidth || (是电脑 ? 360 : 248);
+  stage.style.transform = `scale(${壳宽 / 基准宽})`;
 
   const 有底图 = 是电脑 ? 外设meta.hasBg : (外设meta.mobileHasBg || 外设meta.hasBg);
   const 底图地址 = 有底图
@@ -365,15 +372,17 @@ function 渲染预览舞台到(后缀) {
     const scale = (Number(c.logoSize) || 100) / 100;
     logoImg.style.transform = `scale(${scale})`;
     logoImg.style.transformOrigin = 'center center';
+    logoImg.style.filter = c.logoTone === 'light' ? 'brightness(0) invert(1)' : (c.logoTone === 'dark' ? 'brightness(0)' : 'none');
   }
   const subBox = document.getElementById('外设预览双线' + 后缀);
   const subTxt = document.getElementById('外设预览双线字' + 后缀);
   const subDesc = document.getElementById('外设预览标语' + 后缀);
   if (subBox) subBox.style.display = c.showSub ? 'flex' : 'none';
-  if (subTxt) subTxt.textContent = (c.subtitle || 'Rental Keeper').trim() || 'Rental Keeper';
+  if (subTxt) subTxt.textContent = String(c.subtitle ?? 'Rental Keeper').trim();
   if (subDesc) {
-    subDesc.style.display = c.showSub ? 'block' : 'none';
-    subDesc.textContent = (c.subDesc || 'Property · Billing · Occupancy').trim() || 'Property · Billing · Occupancy';
+    const descTxt = String(c.subDesc ?? 'Property · Billing · Occupancy').trim();
+    subDesc.style.display = (c.showSub && descTxt) ? 'block' : 'none';
+    subDesc.textContent = descTxt;
   }
 
   const formBox = document.getElementById('外设预览表单' + 后缀);
@@ -426,21 +435,23 @@ function 外设放大预览() {
       <button type="button" class="btn 次" onclick="关闭外设放大预览()">关闭预览</button>
     </div>
     <div class="外设放大舞台盒">
-      <div class="外设预览舞台" id="外设预览舞台_大">
-        <img class="外设预览底模糊" id="外设预览底模糊_大" alt="">
-        <img class="外设预览底图" id="外设预览底图_大" alt="">
-        <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
-        <div class="外设预览标题区" id="外设预览标题区_大">
-          <img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图">
-          <div class="外设预览双线" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-          <div id="外设预览标语_大" style="font-size:8px;letter-spacing:.2em;opacity:.75;margin-top:4px;text-transform:uppercase">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+      <div class="外设预览壳" id="外设预览壳_大">
+        <div class="外设预览舞台" id="外设预览舞台_大">
+          <img class="外设预览底模糊" id="外设预览底模糊_大" alt="">
+          <img class="外设预览底图" id="外设预览底图_大" alt="">
+          <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
+          <div class="外设预览标题区" id="外设预览标题区_大">
+            <img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图">
+            <div class="外设预览双线" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+            <div class="外设预览标语" id="外设预览标语_大">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+          </div>
+          <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单_大">
+            <div class="外设预览假框">账号 / Account</div>
+            <div class="外设预览假框">密码 / Password</div>
+            <div class="外设预览假钮">登 录</div>
+          </div>
+          <div class="外设预览备案" id="外设预览备案_大">备案号示例 · 租房管家</div>
         </div>
-        <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单_大">
-          <div class="外设预览假框">账号 / Account</div>
-          <div class="外设预览假框">密码 / Password</div>
-          <div class="外设预览假钮">登 录</div>
-        </div>
-        <div class="外设预览备案" id="外设预览备案_大">备案号示例 · 租房管家</div>
       </div>
     </div>`;
   document.body.appendChild(wrap);
@@ -665,6 +676,10 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
+            <div class="外设标签">Logo 颜色<small>透明底文字图可一键变色</small></div>
+            <div class="外设控件">${外设分段HTML('logoTone', [['original','保持原图'],['light','浅白色'],['dark','深黑色']], c.logoTone || 'original')}</div>
+          </div>
+          <div class="外设行">
             <div class="外设标签">标题大小</div>
             <div class="外设控件">
               <div class="外设滑块组">
@@ -683,14 +698,14 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">英文副标题</div>
+            <div class="外设标签">双线英文<small>显示在标题下方双线中间</small></div>
             <div class="外设控件" style="flex-wrap:nowrap">
               <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
               <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">英文小标语</div>
+            <div class="外设标签">英文小标语<small>双线下方小字（留空隐藏）</small></div>
             <div class="外设控件">
               <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
             </div>
@@ -742,21 +757,23 @@ async function 设置_主题() {
               <button type="button" class="外设小钮" onclick="外设放大预览()">放大预览</button>
             </div>
           </div>
-          <div class="外设预览舞台" id="外设预览舞台" ondblclick="外设放大预览()" title="双击可放大预览">
-            <img class="外设预览底模糊" id="外设预览底模糊" alt="">
-            <img class="外设预览底图" id="外设预览底图" alt="">
-            <div class="外设预览遮罩" id="外设预览遮罩"></div>
-            <div class="外设预览标题区" id="外设预览标题区">
-              <img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图">
-              <div class="外设预览双线" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-              <div id="外设预览标语" style="font-size:7px;letter-spacing:.18em;opacity:.76;margin-top:3px;text-transform:uppercase">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+          <div class="外设预览壳" id="外设预览壳" ondblclick="外设放大预览()" title="双击可放大预览">
+            <div class="外设预览舞台" id="外设预览舞台">
+              <img class="外设预览底模糊" id="外设预览底模糊" alt="">
+              <img class="外设预览底图" id="外设预览底图" alt="">
+              <div class="外设预览遮罩" id="外设预览遮罩"></div>
+              <div class="外设预览标题区" id="外设预览标题区">
+                <img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图">
+                <div class="外设预览双线" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+                <div class="外设预览标语" id="外设预览标语">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+              </div>
+              <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单">
+                <div class="外设预览假框">账号 / Account</div>
+                <div class="外设预览假框">密码 / Password</div>
+                <div class="外设预览假钮">登 录</div>
+              </div>
+              <div class="外设预览备案" id="外设预览备案">备案号示例 · 租房管家</div>
             </div>
-            <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单">
-              <div class="外设预览假框">账号 / Account</div>
-              <div class="外设预览假框">密码 / Password</div>
-              <div class="外设预览假钮">登 录</div>
-            </div>
-            <div class="外设预览备案" id="外设预览备案">备案号示例 · 租房管家</div>
           </div>
           <div class="外设预览提示">
             <span id="外设预览尺寸提示">${外设预览设备 === 'desktop' ? '16:10 桌面视图' : '9:16 手机视图'}</span>

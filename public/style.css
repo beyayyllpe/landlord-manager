@@ -2904,7 +2904,7 @@ body.still *, body.still *::before, body.still *::after {
   margin-bottom: 10px;
 }
 .外设预览顶 span { font-size: 13px; font-weight: 600; color: var(--ink); }
-.外设预览舞台 {
+.外设预览壳 {
   position: relative;
   width: 248px;
   aspect-ratio: 9 / 16;
@@ -2913,18 +2913,32 @@ body.still *, body.still *::before, body.still *::after {
   background: #14161a;
   border: 1px solid var(--border);
   margin: 0 auto;
-  transition: width .22s ease, aspect-ratio .22s ease;
+  cursor: zoom-in;
 }
-.外设预览舞台.电脑 {
+.外设预览壳.电脑 {
   width: 100%;
   aspect-ratio: 16 / 10;
+}
+.外设预览舞台 {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 390px;
+  height: 693px;
+  transform-origin: top left;
+  overflow: hidden;
+  background: #14161a;
+}
+.外设预览舞台.电脑 {
+  width: 1280px;
+  height: 800px;
 }
 .外设预览底图, .外设预览底模糊 {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
 }
-.外设预览底模糊 { filter: blur(18px) brightness(.72); transform: scale(1.1); display: none; }
+.外设预览底模糊 { filter: blur(24px) brightness(.72); transform: scale(1.1); display: none; }
 .外设预览舞台.完整图 .外设预览底模糊 { display: block; }
 .外设预览舞台.完整图 .外设预览底图 { object-fit: contain; }
 .外设预览遮罩 {
@@ -2933,37 +2947,72 @@ body.still *, body.still *::before, body.still *::after {
   background: rgba(0, 0, 0, .35);
 }
 .外设预览标题区 {
-  position: absolute; left: 8%; right: 8%;
+  position: absolute; left: 0; right: 0;
   transform: translateY(-50%);
   text-align: center;
   pointer-events: none;
   display: flex; flex-direction: column; align-items: center;
 }
 .外设预览Logo {
-  max-width: 72%;
-  max-height: 54px;
+  height: 48px;
+  max-width: 82%;
   object-fit: contain;
   display: block;
 }
+.外设预览舞台.电脑 .外设预览Logo { height: 62px; }
 .外设预览双线 {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 82%; margin-top: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  width: 310px; margin-top: 12px;
 }
+.外设预览舞台.电脑 .外设预览双线 { width: 340px; }
 .外设预览双线 i { flex: 1; height: 1px; background: currentColor; opacity: .45; }
 .外设预览双线 em {
-  font-style: normal; font-size: 9px; letter-spacing: .24em;
+  font-style: normal; font-size: 13px; letter-spacing: .42em;
+  padding-left: .42em;
   text-transform: uppercase; opacity: .9; white-space: nowrap;
+}
+.外设预览标语 {
+  font-size: 12px; letter-spacing: .18em; opacity: .78; margin-top: 10px; text-transform: uppercase;
 }
 .外设预览表单 {
   position: absolute; left: 50%;
   transform: translate(-50%, -50%);
-  width: 78%; max-width: 240px;
-  padding: 12px 12px 10px;
-  border-radius: 14px;
-  display: flex; flex-direction: column; gap: 7px;
-  transition: background .18s, border-color .18s;
+  width: 310px;
+  padding: 22px 20px;
+  border-radius: 18px;
+  display: flex; flex-direction: column; gap: 12px;
 }
-.外设预览舞台.电脑 .外设预览表单 { width: 52%; max-width: 196px; padding: 10px; gap: 6px; }
+.外设预览舞台.电脑 .外设预览表单 { width: 320px; }
+.外设预览假框 {
+  height: 46px; border-radius: 23px;
+  border: 1px solid rgba(255, 255, 255, .34);
+  background: rgba(18, 20, 24, .24);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; letter-spacing: .12em; opacity: .88;
+}
+.外设预览表单.样式-solid .外设预览假框 {
+  border-color: rgba(0,0,0,.14);
+  background: rgba(0,0,0,.04);
+  color: #444;
+}
+.外设预览假钮 {
+  height: 46px; border-radius: 23px;
+  margin-top: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 600; letter-spacing: .5em; padding-left: .5em;
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .42);
+}
+.外设预览表单.样式-solid .外设预览假钮 {
+  background: var(--preview-accent, #18181b);
+  color: #fff;
+  border-color: transparent;
+}
+.外设预览备案 {
+  position: absolute; left: 0; right: 0; bottom: 18px;
+  text-align: center; font-size: 12px; opacity: .78;
+  pointer-events: none;
+}
 .外设预览表单.样式-glass {
   background: transparent;
   border: 0;
@@ -3021,24 +3070,20 @@ body.still *, body.still *::before, body.still *::after {
   flex: 1;
   min-height: 0;
 }
-.外设放大舞台盒 .外设预览舞台 {
-  max-height: 78vh;
+.外设放大舞台盒 .外设预览壳 {
   height: 78vh;
   width: auto;
   aspect-ratio: 9 / 16;
   border-color: rgba(255,255,255,.22);
   box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  cursor: default;
 }
-.外设放大舞台盒 .外设预览舞台.电脑 {
-  width: min(1080px, 92vw);
+.外设放大舞台盒 .外设预览壳.电脑 {
+  width: min(1080px, 90vw);
   height: auto;
   max-height: 78vh;
   aspect-ratio: 16 / 10;
 }
-.外设放大舞台盒 .外设预览Logo { max-height: 82px; }
-.外设放大舞台盒 .外设预览表单 { max-width: 300px; }
-.外设放大舞台盒 .外设预览假框,
-.外设放大舞台盒 .外设预览假钮 { height: 38px; font-size: 13px; }
 .外设预览假框 {
   height: 24px; border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, .32);

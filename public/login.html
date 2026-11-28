@@ -564,6 +564,13 @@
             const logo = document.getElementById('登录标题图');
             if (logo) logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
           }
+          if (wg.logoTone === 'light') {
+            const logo = document.getElementById('登录标题图');
+            if (logo) { logo.classList.remove('默认白'); logo.style.filter = 'brightness(0) invert(1)'; }
+          } else if (wg.logoTone === 'dark') {
+            const logo = document.getElementById('登录标题图');
+            if (logo) { logo.classList.remove('默认白'); logo.style.filter = 'brightness(0)'; }
+          }
           if (typeof wg.titleY === 'number') {
             const hd = document.querySelector('.双线头部');
             if (hd) {
