@@ -869,9 +869,6 @@ function 外设自由文字HTML(list) {
       <div class="外设文头">
         <input type="color" class="外设取色" value="${t.color || '#ffffff'}" oninput="外设文改(${i},'color',this.value)" title="该行文字颜色">
         <input type="text" class="外设输入框" value="${转义(t.text || '')}" maxlength="60" oninput="外设文改(${i},'text',this.value)" placeholder="输入任意文字...">
-        <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);cursor:pointer;white-space:nowrap">
-          <input type="checkbox" ${t.line ? 'checked' : ''} onchange="外设文改(${i},'line',this.checked)">双线
-        </label>
         <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
       </div>
       <div class="外设文格">
@@ -1076,7 +1073,8 @@ async function 设置_主题() {
   <div class="外设页">
     <div class="外设顶栏">
       <div class="外设顶栏标题">
-        <h2>外观与登录页</h2>
+        <div class="高设面包屑">设置 / 个性设置</div>
+        <h2>个性设置</h2>
         <p>调整后台主题与登录页视觉，右侧实时预览</p>
       </div>
       <div class="外设顶栏操作">
@@ -1207,13 +1205,13 @@ function 清理TS密钥定时() {
 function 切安全页签(键) {
   安全设置页签 = 键;
   document.querySelectorAll('[data-安全面板]').forEach(el => { el.hidden = el.dataset.安全面板 !== 键; });
-  document.querySelectorAll('[data-安全页签]').forEach(el => el.classList.toggle('选中', el.dataset.安全页签 === 键));
+  document.querySelectorAll('[data-安全页签]').forEach(el => el.classList.toggle('激活', el.dataset.安全页签 === 键));
 }
 
 function 切关于页签(键) {
   关于页签 = 键;
   document.querySelectorAll('[data-关于面板]').forEach(el => { el.hidden = el.dataset.关于面板 !== 键; });
-  document.querySelectorAll('[data-关于页签]').forEach(el => el.classList.toggle('选中', el.dataset.关于页签 === 键));
+  document.querySelectorAll('[data-关于页签]').forEach(el => el.classList.toggle('激活', el.dataset.关于页签 === 键));
 }
 
 async function 设置_安全() {
@@ -1228,10 +1226,15 @@ async function 设置_安全() {
     ? '已通过服务端环境变量配置（TURNSTILE_SECRET_KEY）'
     : (密钥已配 ? '••••••••••••••••••••••••' : '0x4AAAAAAA...');
   return `
-    <nav class="外设页签栏" style="margin-bottom:14px" role="tablist">
-      <button type="button" class="外设页签 ${安全设置页签 === 'pwd' ? '选中' : ''}" data-安全页签="pwd" onclick="切安全页签('pwd')">登录密码</button>
-      <button type="button" class="外设页签 ${安全设置页签 === 'ts' ? '选中' : ''}" data-安全页签="ts" onclick="切安全页签('ts')">人机验证</button>
-    </nav>
+    <div class="高设页头">
+      <div class="高设面包屑">设置 / 安全设置</div>
+      <h1>安全设置</h1>
+      <p>管理登录账号密码与 Cloudflare Turnstile 人机验证。</p>
+    </div>
+    <div class="高设页签栏">
+      <button type="button" class="高设页签${安全设置页签 === 'pwd' ? ' 激活' : ''}" data-安全页签="pwd" onclick="切安全页签('pwd')">登录密码</button>
+      <button type="button" class="高设页签${安全设置页签 === 'ts' ? ' 激活' : ''}" data-安全页签="ts" onclick="切安全页签('ts')">人机验证</button>
+    </div>
     <div class="卡片" data-安全面板="pwd" ${安全设置页签 === 'pwd' ? '' : 'hidden'}>
       <h2>登录密码</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">当前登录用户名：<b style="color:var(--文字)">${转义(账号.用户名 || '—')}</b>。改密后需重新登录（浏览器会重新弹出登录框）。</p>
@@ -1816,10 +1819,15 @@ async function 设置_关于() {
   const v = await api('/api/version').catch(() => null);
   if (v) 当前版本信息 = v;   // 拉不到（更新重启中）就沿用上一次的，别把版本号抹成「未知」
   return `
-    <nav class="外设页签栏" style="margin-bottom:14px" role="tablist">
-      <button type="button" class="外设页签 ${关于页签 === 'backup' ? '选中' : ''}" data-关于页签="backup" onclick="切关于页签('backup')">数据备份与迁移</button>
-      <button type="button" class="外设页签 ${关于页签 === 'update' ? '选中' : ''}" data-关于页签="update" onclick="切关于页签('update')">版本与在线更新</button>
-    </nav>
+    <div class="高设页头">
+      <div class="高设面包屑">设置 / 关于</div>
+      <h1>关于</h1>
+      <p>数据完整备份、迁移导入以及系统版本与在线更新。</p>
+    </div>
+    <div class="高设页签栏">
+      <button type="button" class="高设页签${关于页签 === 'backup' ? ' 激活' : ''}" data-关于页签="backup" onclick="切关于页签('backup')">数据备份与迁移</button>
+      <button type="button" class="高设页签${关于页签 === 'update' ? ' 激活' : ''}" data-关于页签="update" onclick="切关于页签('update')">版本与在线更新</button>
+    </div>
     <div data-关于面板="backup" ${关于页签 === 'backup' ? '' : 'hidden'}>${设置_导出()}</div>
     <div data-关于面板="update" ${关于页签 === 'update' ? '' : 'hidden'}>${在线更新卡片()}</div>`;
 }
