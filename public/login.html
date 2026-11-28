@@ -726,8 +726,23 @@
               if (!d) return;
               const sc = (Number(d.size) || 100) / 100;
               const op = ((Number(d.opacity ?? 45)) / 100).toFixed(2);
-              baseCss.push(`.登录控件-divider-${idx} { position:fixed; left:${Number(d.x ?? 50)}%; top:${Number(d.y ?? 45)}%; transform:translate(-50%,-50%) scaleX(${sc}); color:${d.color || '#ffffff'}; opacity:${op}; width:220px; height:0; border-top:1px ${d.style || 'solid'} currentColor; }`);
-              控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"></div>`);
+              const st = d.style || 'solid';
+              const base = `position:fixed; left:${Number(d.x ?? 50)}%; top:${Number(d.y ?? 45)}%; color:${d.color || '#ffffff'}; opacity:${op};`;
+              if (st === 'fade') {
+                baseCss.push(`.登录控件-divider-${idx} { ${base} transform:translate(-50%,-50%) scaleX(${sc}); width:240px; height:1px; background:linear-gradient(90deg,transparent,currentColor,transparent); }`);
+                控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"></div>`);
+              } else if (st === 'dotend') {
+                baseCss.push(`.登录控件-divider-${idx} { ${base} transform:translate(-50%,-50%) scaleX(${sc}); width:240px; height:5px; display:flex; align-items:center; }`);
+                控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"><i style="width:4px;height:4px;border-radius:50%;background:currentColor"></i><span style="flex:1;height:1px;background:currentColor"></span><i style="width:4px;height:4px;border-radius:50%;background:currentColor"></i></div>`);
+              } else if (st === 'vline' || st === 'vdouble') {
+                const bw = st === 'vdouble' ? '3px double' : '1px solid';
+                baseCss.push(`.登录控件-divider-${idx} { ${base} transform:translate(-50%,-50%) scaleY(${sc}); width:0; height:80px; border-left:${bw} currentColor; }`);
+                控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"></div>`);
+              } else {
+                const bw = st === 'double' ? '3px double' : `1px ${st}`;
+                baseCss.push(`.登录控件-divider-${idx} { ${base} transform:translate(-50%,-50%) scaleX(${sc}); width:240px; height:0; border-top:${bw} currentColor; }`);
+                控件HTML.push(`<div class="登录控件 登录控件-divider-${idx}"></div>`);
+              }
             });
             wLayer.innerHTML = 控件HTML.join('');
             const 刷时钟 = () => {

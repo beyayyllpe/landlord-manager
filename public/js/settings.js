@@ -502,8 +502,21 @@ function 计算节气(d) {
     divs.forEach((d, idx) => {
       if (!d) return;
       const op = ((Number(d.opacity ?? 45)) / 100).toFixed(2);
-      const sty = `left:${Number(d.x ?? 50)}%;top:${Number(d.y ?? 45)}%;transform:translate(-50%,-50%) scaleX(${(Number(d.size)||100)/100});color:${d.color || '#ffffff'};opacity:${op};border-top-style:${d.style || 'solid'};`;
-      htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${sty}"></div>`);
+      const col = d.color || '#ffffff';
+      const st = d.style || 'solid';
+      const sc = (Number(d.size) || 100) / 100;
+      const base = `left:${Number(d.x ?? 50)}%;top:${Number(d.y ?? 45)}%;color:${col};opacity:${op};`;
+      if (st === 'fade') {
+        htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${base}transform:translate(-50%,-50%) scaleX(${sc});width:240px;height:1px;border:0;background:linear-gradient(90deg,transparent,currentColor,transparent);"></div>`);
+      } else if (st === 'dotend') {
+        htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${base}transform:translate(-50%,-50%) scaleX(${sc});width:240px;height:5px;border:0;display:flex;align-items:center;"><i style="width:4px;height:4px;border-radius:50%;background:currentColor"></i><span style="flex:1;height:1px;background:currentColor"></span><i style="width:4px;height:4px;border-radius:50%;background:currentColor"></i></div>`);
+      } else if (st === 'vline' || st === 'vdouble') {
+        const bw = st === 'vdouble' ? '3px double' : '1px solid';
+        htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${base}transform:translate(-50%,-50%) scaleY(${sc});width:0;height:80px;border:0;border-left:${bw} currentColor;"></div>`);
+      } else {
+        const bw = st === 'double' ? '3px double' : `1px ${st}`;
+        htmls.push(`<div class="外设预览控件 控件-divider 登录控件 登录控件-divider-${idx}" style="${base}transform:translate(-50%,-50%) scaleX(${sc});width:240px;height:0;border:0;border-top:${bw} currentColor;"></div>`);
+      }
     });
     widgetLayer.innerHTML = htmls.join('');
   }
@@ -762,12 +775,16 @@ function 外设件改(k, 键, 值, el) {
 }
 
 function 外设线HTML(list) {
+  const 线型表 = [
+    ['solid', '实线'], ['double', '双线'], ['dashed', '虚线'], ['dotted', '点线'],
+    ['fade', '渐隐线'], ['dotend', '端圆点'], ['vline', '竖直线'], ['vdouble', '双竖线']
+  ];
   return (Array.isArray(list) ? list : []).map((d, i) => `
     <div class="外设文卡">
       <div class="外设文头" style="justify-content:space-between">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="color" class="外设取色" value="${d.color || '#ffffff'}" oninput="外设线改(${i},'color',this.value)" title="细线颜色">
-          <div class="外设分段">${[['solid','实线'],['dashed','虚线'],['dotted','点线']].map(([v, t]) =>
+          <div class="外设分段">${线型表.map(([v, t]) =>
             `<button type="button" class="外设分段钮 ${(d.style || 'solid') === v ? '选中' : ''}" onclick="外设线改(${i},'style','${v}',this)">${t}</button>`
           ).join('')}</div>
         </div>
