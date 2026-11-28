@@ -658,7 +658,23 @@
               if (!wg.subDesc.trim()) sub2.style.display = 'none';
             }
           }
+          if (wg.formStyle === 'solid') document.body.classList.add('表单实色');
+          else if (wg.formStyle === 'outline') document.body.classList.add('表单描边');
+          else if (wg.formStyle === 'minimal') document.body.classList.add('表单极简');
+          if (wg.btnText) {
+            const btn = document.getElementById('登录钮');
+            if (btn) btn.textContent = String(wg.btnText).trim() || '登 录';
+          }
           const cssRules = [];
+          if (wg.formWidth || wg.inputRadius !== undefined) {
+            cssRules.push(`
+              ${wg.formWidth ? `body.有背景 .登录卡 { max-width: min(${Number(wg.formWidth)}px, 90vw); width: min(${Number(wg.formWidth)}px, 90vw); }` : ''}
+              ${wg.inputRadius !== undefined ? `body.有背景 .输入盒 input, body.有背景 .登录钮 { border-radius: ${Number(wg.inputRadius)}px; }` : ''}
+              body.有背景.表单描边 .登录卡 { padding: 22px 20px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.48); }
+              body.有背景.表单极简 .输入盒 input { border: 0; border-bottom: 1px solid rgba(255,255,255,0.48); border-radius: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+              body.有背景.表单极简 .登录钮 { backdrop-filter: none; -webkit-backdrop-filter: none; }
+            `);
+          }
           if (wg.subSize || wg.subTracking) {
             const tr = wg.subTracking ? (Number(wg.subTracking) / 100).toFixed(2) + 'em' : '';
             cssRules.push(`

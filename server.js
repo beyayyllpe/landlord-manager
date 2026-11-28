@@ -1093,7 +1093,8 @@ app.post('/api/settings', (req, res) => {
       const 允许 = [
         'theme','bgFit','overlay','blur','autoContrast',
         'logoSize','logoTint','logoStroke','logoStrokeColor','logoShadow',
-        'titleY','formY','textColor','textWeight','textStroke','textStrokeColor','textShadow',
+        'titleY','formY','formStyle','formWidth','inputRadius','btnText',
+        'textColor','textWeight','textStroke','textStrokeColor','textShadow',
         'texts','showFoot','customCss'
       ];
       const 净 = {};

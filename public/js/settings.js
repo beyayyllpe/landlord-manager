@@ -268,6 +268,10 @@ function 默认外观配置() {
     logoShadow: 10,
     titleY: 24,
     formY: 62,
+    formStyle: 'glass',
+    formWidth: 320,
+    inputRadius: 23,
+    btnText: '登 录',
     textColor: '#ffffff',
     textWeight: '500',
     textStroke: 0,
@@ -433,10 +437,15 @@ function 渲染预览舞台到(后缀) {
   const formBox = document.getElementById('外设预览表单' + 后缀);
   if (formBox) {
     formBox.style.top = `${c.formY}%`;
+    formBox.className = `外设预览表单 登录卡 样式-${c.formStyle || 'glass'}`;
     stage.style.setProperty('--preview-blur', `${Number(c.blur) || 0}px`);
-    formBox.style.color = tc;
+    stage.style.setProperty('--preview-form-w', `${Number(c.formWidth) || 320}px`);
+    stage.style.setProperty('--preview-ir', `${Number(c.inputRadius ?? 23)}px`);
+    formBox.style.color = c.formStyle === 'solid' ? '#1f2329' : tc;
     formBox.style.fontWeight = tw;
-    formBox.style.textShadow = textShadowCss;
+    formBox.style.textShadow = c.formStyle === 'solid' ? 'none' : textShadowCss;
+    const btnEl = formBox.querySelector('.外设预览假钮');
+    if (btnEl) btnEl.textContent = String(c.btnText || '登 录').trim() || '登 录';
   }
 
   const foot = document.getElementById('外设预览备案' + 后缀);
@@ -534,7 +543,7 @@ function 外设滑(键, 值) {
   外设草稿[键] = Number(值);
   const lab = document.getElementById(`外设值_${键}`);
   if (lab) {
-    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize'].includes(键)) lab.textContent = `${值}px`;
+    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius'].includes(键)) lab.textContent = `${值}px`;
     else if (键 === 'subTracking') lab.textContent = `${(Number(值) / 100).toFixed(2)}em`;
     else lab.textContent = `${值}%`;
   }
@@ -635,7 +644,7 @@ const 外设标签列表 = [
 ];
 
 function 外设显示值(键, 值) {
-  if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize'].includes(键)) return `${值}px`;
+  if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius'].includes(键)) return `${值}px`;
   if (键 === 'subTracking') return `${(Number(值) / 100).toFixed(2)}em`;
   return `${值}%`;
 }
@@ -790,10 +799,18 @@ async function 设置_主题() {
   ].join(''));
 
   const 表单面板 = 面板('form', [
+    外设行HTML('表单样式', '',
+      外设分段HTML('formStyle', [['glass', '玻璃'], ['solid', '实色'], ['outline', '描边'], ['minimal', '极简']], c.formStyle || 'glass')),
+    外设行HTML('表单宽度', '',
+      外设滑块HTML('formWidth', 240, 440, 2, c.formWidth || 320)),
     外设行HTML('表单位置', '距离顶部的百分比',
       外设滑块HTML('formY', 40, 86, 1, c.formY)),
+    外设行HTML('输入框圆角', '',
+      外设滑块HTML('inputRadius', 0, 30, 1, c.inputRadius ?? 23)),
     外设行HTML('玻璃模糊', '透明表单的磨砂强度',
       外设滑块HTML('blur', 0, 16, 1, c.blur)),
+    外设行HTML('按钮文字', '',
+      `<input type="text" class="外设输入框" value="${转义(c.btnText || '登 录')}" maxlength="20" oninput="外设字('btnText',this.value)" placeholder="登 录">`),
     外设行HTML('底部备案信息', '显示登录页底部的备案号',
       外设开关HTML('showFoot', c.showFoot)),
   ].join(''));
