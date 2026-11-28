@@ -2969,6 +2969,12 @@ body.still *, body.still *::before, body.still *::after {
   backdrop-filter: blur(var(--preview-blur, 10px));
   -webkit-backdrop-filter: blur(var(--preview-blur, 10px));
 }
+.外设预览舞台.深色字 .外设预览假框,
+.外设预览舞台.深色字 .外设预览假钮 {
+  background: rgba(255, 255, 255, 0.45);
+  border-color: rgba(31, 35, 41, 0.28);
+  color: #1f2329;
+}
 .外设预览表单.样式-solid {
   background: rgba(255, 255, 255, .92);
   border: 1px solid rgba(0, 0, 0, .08);

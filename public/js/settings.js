@@ -330,7 +330,8 @@ function 渲染预览舞台到(后缀) {
   if (!stage || !外设草稿) return;
   const c = 外设草稿;
   const 是电脑 = 外设预览设备 === 'desktop';
-  stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '');
+  const 偏暗字 = c.textTone === 'dark';
+  stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '') + (偏暗字 ? ' 深色字' : '');
   stage.style.setProperty('--preview-accent', c.accent || '#18181b');
 
   const 有底图 = 是电脑 ? 外设meta.hasBg : (外设meta.mobileHasBg || 外设meta.hasBg);
@@ -353,7 +354,7 @@ function 渲染预览舞台到(后缀) {
   const mask = document.getElementById('外设预览遮罩' + 后缀);
   if (mask) mask.style.background = `rgba(10, 12, 14, ${(Number(c.overlay) || 0) / 100})`;
 
-  const toneColor = c.textTone === 'dark' ? '#1f2329' : '#ffffff';
+  const toneColor = c.textTone === 'dark' ? '#1f2329' : (c.textTone === 'light' ? '#ffffff' : (Number(c.overlay) < 15 && c.autoContrast ? '#f8fafc' : '#ffffff'));
   const titleBox = document.getElementById('外设预览标题区' + 后缀);
   if (titleBox) {
     titleBox.style.top = `${c.titleY}%`;
@@ -451,11 +452,17 @@ function 关闭外设放大预览() {
   if (el) el.remove();
 }
 
-function 外设选(键, 值) {
+function 外设选(键, 值, 按钮El) {
   if (!外设草稿) return;
   外设草稿[键] = 值;
   if (键 === 'theme') 切换主题(值);
   if (['accent', 'radius', 'card', 'density'].includes(键)) 应用全局外观(外设草稿);
+  if (按钮El && 按钮El.parentElement) {
+    Array.from(按钮El.parentElement.children).forEach(el => el.classList.remove('选中'));
+    按钮El.classList.add('选中');
+    更新外设预览();
+    return;
+  }
   渲染设置页();
 }
 
@@ -512,7 +519,8 @@ function 外设恢复默认() {
 
 async function 外设保存() {
   if (!外设草稿) return;
-  const 新设置 = await api('/api/settings', 'POST', { 外观: 外设草稿 });
+  const 新设置 = await api('/api/settings', { method: 'POST', body: { 外观: 外设草稿 } });
+  if (新设置 && 新设置.错误) { 提示(新设置.错误); return; }
   if (typeof 全局 === 'object' && 全局) 全局.settings = 新设置;
   if (外设草稿.theme && 外设草稿.theme !== 主题) 切换主题(外设草稿.theme);
   应用全局外观(外设草稿);
@@ -546,7 +554,7 @@ function 外设磁贴HTML(标题, target, has, kind, cls) {
 
 function 外设分段HTML(键, 选项列表, 当前值) {
   return `<div class="外设分段">${选项列表.map(([v, t]) =>
-    `<button type="button" class="外设分段钮 ${当前值 === v ? '选中' : ''}" onclick="外设选('${键}','${v}')">${t}</button>`
+    `<button type="button" class="外设分段钮 ${当前值 === v ? '选中' : ''}" onclick="外设选('${键}','${v}',this)">${t}</button>`
   ).join('')}</div>`;
 }
 
