@@ -504,8 +504,8 @@ function 外设放大预览() {
       <div class="外设预览壳" id="外设预览壳_大">
         <div class="外设预览舞台" id="外设预览舞台_大">
           <img class="外设预览底模糊" id="外设预览底模糊_大" alt="">
-          <img class="外设预览底图" id="外设预览底图_大" alt="">
-          <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
+          <img class="外设预览底图 背景主层" id="外设预览底图_大" alt="">
+          <div class="外设预览遮罩 背景遮罩" id="外设预览遮罩_大"></div>
           <div class="外设预览标题区 双线头部" id="外设预览标题区_大">
             <div class="Logo滤镜盒" id="外设预览Logo盒_大"><div class="Logo着色层" id="外设预览Logo着色_大"><img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图"></div></div>
           </div>
@@ -823,8 +823,8 @@ async function 设置_主题() {
   ].join(''));
 
   const 高级面板 = 面板('adv', [
-    外设行HTML('自定义 CSS', '可选。可覆盖 .双线英 .双线副 .登录卡 .登录钮 等类名的样式',
-      `<textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线副 { letter-spacing: 0.3em; }">${转义(c.customCss || '')}</textarea>`, '顶对齐'),
+    外设行HTML('自定义 CSS', '绝对优先覆盖前面所有外观设置。<br>可用类名：.背景遮罩 .双线头部 .双线英 .双线副 .登录卡 .输入盒 .登录钮 .备案底栏（也可用 ::before / ::after 伪元素添加文字）',
+      `<textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线头部::after { content: 'WELCOME'; display: block; margin-top: 8px; font-size: 11px; letter-spacing: .3em; }">${转义(c.customCss || '')}</textarea>`, '顶对齐'),
   ].join(''));
 
   return `
@@ -867,8 +867,8 @@ async function 设置_主题() {
           <div class="外设预览壳" id="外设预览壳" ondblclick="外设放大预览()" title="双击可放大预览">
             <div class="外设预览舞台" id="外设预览舞台">
               <img class="外设预览底模糊" id="外设预览底模糊" alt="">
-              <img class="外设预览底图" id="外设预览底图" alt="">
-              <div class="外设预览遮罩" id="外设预览遮罩"></div>
+              <img class="外设预览底图 背景主层" id="外设预览底图" alt="">
+              <div class="外设预览遮罩 背景遮罩" id="外设预览遮罩"></div>
               <div class="外设预览标题区 双线头部" id="外设预览标题区">
                 <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图"></div></div>
               </div>
