@@ -482,8 +482,8 @@ td.操作列 .文字链:last-child { padding-right: 0; }
   padding: 7px 14px;
   border: 1px solid transparent;
   border-radius: calc(var(--app-radius, 12px) * 0.62);
-  background: var(--accent, var(--ink));
-  color: var(--accent-fg, var(--filter-active-text));
+  background: var(--ink);
+  color: var(--filter-active-text);
   font-family: inherit;
   font-size: 13px;
   font-weight: var(--fw-medium);
@@ -2633,13 +2633,7 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 
 /* ============ 全局外观变量 ============ */
 :root {
-  --accent: #18181b;
-  --accent-fg: #ffffff;
   --app-radius: 12px;
-}
-[data-theme="dark"] {
-  --accent: #e5e5e5;
-  --accent-fg: #141414;
 }
 
 /* ============ 外观与登录页自定义（v3 双栏预览） ============ */
@@ -2679,9 +2673,57 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
 .外设左列 {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
 }
+.外设页签栏 {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  width: fit-content;
+  flex-wrap: wrap;
+}
+.外设页签 {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.外设页签.选中 {
+  background: var(--ink);
+  color: var(--filter-active-text);
+  font-weight: 600;
+}
+.外设面板 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--app-radius, 14px);
+  padding: 16px 20px;
+  box-shadow: var(--阴影);
+}
+.外设面板[hidden] { display: none; }
+.外设分组名 {
+  margin: 16px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: .04em;
+}
+.外设滑块 { display: flex; align-items: center; gap: 10px; width: 100%; }
+.外设滑块 input[type="range"] { flex: 1; accent-color: var(--ink); cursor: pointer; }
+.外设开关 input:checked + .外设开关轨 { background: var(--ink); border-color: var(--ink); }
+.外设预览操作 { display: flex; align-items: center; gap: 6px; }
 .外设卡 {
   background: var(--surface);
   border: 1px solid var(--border);

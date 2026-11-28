@@ -257,7 +257,6 @@ let 外设图版本 = Date.now();
 function 默认外观配置() {
   return {
     theme: 主题 || '跟随系统',
-    accent: '#18181b',
     bgFit: 'fill',
     overlay: 35,
     blur: 10,
@@ -291,23 +290,8 @@ function 读外观配置() {
   return Object.assign(默认外观配置(), saved);
 }
 
-function 计算反白色(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
-  if (!m) return '#ffffff';
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return (0.299 * r + 0.587 * g + 0.114 * b) > 158 ? '#141414' : '#ffffff';
-}
-
-function 应用全局外观(cfg) {
-  const c = Object.assign(默认外观配置(), cfg || 读外观配置());
-  const root = typeof document !== 'undefined' ? document.documentElement : null;
-  if (root && root.style && typeof root.style.setProperty === 'function') {
-    if (c.accent) {
-      root.style.setProperty('--accent', c.accent);
-      root.style.setProperty('--accent-fg', 计算反白色(c.accent));
-    }
-  }
+function 应用全局外观() {
+  // 全局主题由 应用主题() 负责，明亮=黑底白字，暗黑=白底黑字
 }
 
 function 外设是否未保存() {
@@ -642,6 +626,55 @@ function 外设分段HTML(键, 选项列表, 当前值) {
   ).join('')}</div>`;
 }
 
+let 外设当前标签 = 'look';
+const 外设标签列表 = [
+  ['look', '外观'],
+  ['bg', '背景'],
+  ['title', '标题'],
+  ['form', '表单'],
+  ['adv', '高级'],
+];
+
+function 外设显示值(键, 值) {
+  if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize'].includes(键)) return `${值}px`;
+  if (键 === 'subTracking') return `${(Number(值) / 100).toFixed(2)}em`;
+  return `${值}%`;
+}
+
+function 外设滑块HTML(键, 最小, 最大, 步长, 当前) {
+  return `
+    <div class="外设滑块">
+      <input type="range" min="${最小}" max="${最大}" step="${步长}" value="${当前}" oninput="外设滑('${键}',this.value)">
+      <output class="外设滑块值" id="外设值_${键}">${外设显示值(键, 当前)}</output>
+    </div>`;
+}
+
+function 外设开关HTML(键, 开) {
+  return `<label class="外设开关"><input type="checkbox" ${开 ? 'checked' : ''} onchange="外设开('${键}',this.checked)"><span class="外设开关轨"></span></label>`;
+}
+
+function 外设取色HTML(键, 值, 标题) {
+  return `<input type="color" class="外设取色" value="${值}" oninput="外设调色('${键}',this.value)" title="${标题}">`;
+}
+
+function 外设行HTML(标签, 说明, 控件, 修饰) {
+  return `
+    <div class="外设行 ${修饰 || ''}">
+      <div class="外设标签">${标签}${说明 ? `<small>${说明}</small>` : ''}</div>
+      <div class="外设控件">${控件}</div>
+    </div>`;
+}
+
+function 外设分组HTML(名) {
+  return `<h4 class="外设分组名">${名}</h4>`;
+}
+
+function 外设切标签(键) {
+  外设当前标签 = 键;
+  document.querySelectorAll('[data-面板]').forEach(el => { el.hidden = el.dataset.面板 !== 键; });
+  document.querySelectorAll('[data-页签]').forEach(el => el.classList.toggle('选中', el.dataset.页签 === 键));
+}
+
 async function 设置_主题() {
   外设meta = await fetch('/api/login-bg/meta').then(r => r.json()).catch(() => ({ hasBg: false, mobileHasBg: false, logoHasBg: false, kind: 'image', mobileKind: 'image' }));
   外设图版本 = Date.now();
@@ -655,15 +688,100 @@ async function 设置_主题() {
   }
   const c = 外设草稿;
   const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
+  const 副标题 = 转义(c.subtitle || 'Rental Keeper');
+  const 标语 = 转义(c.subDesc || 'Property · Billing · Occupancy');
 
   setTimeout(更新外设预览, 0);
+
+  const 页签HTML = 外设标签列表.map(([键, 名]) =>
+    `<button type="button" class="外设页签 ${键 === 外设当前标签 ? '选中' : ''}" data-页签="${键}" onclick="外设切标签('${键}')">${名}</button>`
+  ).join('');
+  const 面板 = (键, 内容) =>
+    `<section class="外设面板" data-面板="${键}" ${键 === 外设当前标签 ? '' : 'hidden'}>${内容}</section>`;
+
+  const 外观面板 = 面板('look', [
+    外设行HTML('主题模式', '明亮黑底白字 / 暗黑模式白底黑字，本设备独立记忆',
+      外设分段HTML('theme', [['明亮', '明亮'], ['暗黑', '暗黑'], ['跟随系统', '跟随系统']], c.theme)),
+  ].join(''));
+
+  const 背景面板 = 面板('bg', [
+    外设行HTML('背景图片', '电脑 / 手机独立配置',
+      `<div class="外设磁贴列 双格">
+        ${外设磁贴HTML('16:9 电脑端', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
+        ${外设磁贴HTML('9:16 手机端', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
+      </div>`, '顶对齐'),
+    外设行HTML('背景填充', '',
+      外设分段HTML('bgFit', [['fill', '铺满裁切'], ['fit', '完整显示']], c.bgFit)),
+    外设行HTML('遮罩强度', '压暗背景，提升文字可读性',
+      外设滑块HTML('overlay', 0, 80, 1, c.overlay)),
+    外设行HTML('自动对比度', '依据背景明暗微调文字',
+      外设开关HTML('autoContrast', c.autoContrast)),
+  ].join(''));
+
+  const 标题面板 = 面板('title', [
+    外设行HTML('标题图 Logo', '推荐透明背景 PNG',
+      `<div class="外设磁贴列 单格">
+        ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
+      </div>`, '顶对齐'),
+    外设行HTML('Logo 染色', '透明 PNG 可任意染色',
+      `<input type="color" id="外设Logo取色" class="外设取色" value="${c.logoTint || '#f6d594'}" oninput="外设调色('logoTint',this.value)" title="选择 Logo 染色">
+       <button type="button" class="外设小钮" onclick="外设调色('logoTint','#ffffff')">纯白</button>
+       <button type="button" class="外设小钮" onclick="外设调色('logoTint','#1f2329')">深黑</button>
+       <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原</button>`),
+    外设行HTML('Logo 描边', '',
+      `${外设取色HTML('logoStrokeColor', c.logoStrokeColor || '#000000', '描边颜色')}
+       ${外设滑块HTML('logoStroke', 0, 4, 0.5, c.logoStroke || 0)}`),
+    外设行HTML('Logo 阴影', '',
+      外设滑块HTML('logoShadow', 0, 28, 1, c.logoShadow ?? 10)),
+    外设行HTML('Logo 大小', '',
+      外设滑块HTML('logoSize', 40, 250, 1, c.logoSize)),
+    外设行HTML('标题位置', '距离顶部的百分比',
+      外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
+
+    外设分组HTML('双线装饰'),
+    外设行HTML('双线英文', '标题下方两条线中间的文字',
+      `${外设开关HTML('showSub', c.showSub)}
+       <input type="text" class="外设输入框" value="${副标题}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">`),
+    外设行HTML('双线字号', '',
+      外设滑块HTML('subSize', 10, 24, 1, c.subSize || 13)),
+    外设行HTML('双线字距', '',
+      外设滑块HTML('subTracking', 10, 80, 1, c.subTracking || 42)),
+    外设行HTML('英文小标语', '双线下方的小字',
+      `${外设开关HTML('showDesc', c.showDesc !== false)}
+       <input type="text" class="外设输入框" value="${标语}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">`),
+  ].join(''));
+
+  const 表单面板 = 面板('form', [
+    外设分组HTML('文字'),
+    外设行HTML('文字颜色与字重', '',
+      `${外设取色HTML('textColor', c.textColor || '#ffffff', '文字颜色')}
+       ${外设分段HTML('textWeight', [['300', '细'], ['400', '常规'], ['600', '中粗'], ['700', '粗']], String(c.textWeight || '500'))}`),
+    外设行HTML('文字描边', '',
+      `${外设取色HTML('textStrokeColor', c.textStrokeColor || '#000000', '文字描边颜色')}
+       ${外设滑块HTML('textStroke', 0, 2, 0.3, c.textStroke || 0)}`),
+    外设行HTML('文字阴影', '',
+      外设滑块HTML('textShadow', 0, 24, 1, c.textShadow ?? 8)),
+
+    外设分组HTML('表单与布局'),
+    外设行HTML('表单位置', '距离顶部的百分比',
+      外设滑块HTML('formY', 40, 86, 1, c.formY)),
+    外设行HTML('玻璃模糊', '透明表单的磨砂强度',
+      外设滑块HTML('blur', 0, 16, 1, c.blur)),
+    外设行HTML('底部备案信息', '显示登录页底部的备案号',
+      外设开关HTML('showFoot', c.showFoot)),
+  ].join(''));
+
+  const 高级面板 = 面板('adv', [
+    外设行HTML('自定义 CSS', '可选。可覆盖 .双线英 .双线副 .登录卡 .登录钮 等类名的样式',
+      `<textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线副 { letter-spacing: 0.3em; }">${转义(c.customCss || '')}</textarea>`, '顶对齐'),
+  ].join(''));
 
   return `
   <div class="外设页">
     <div class="外设顶栏">
       <div class="外设顶栏标题">
         <h2>外观与登录页</h2>
-        <p>全局界面风格与登录页视觉排版，右侧实时预览效果</p>
+        <p>调整后台主题与登录页视觉，右侧实时预览</p>
       </div>
       <div class="外设顶栏操作">
         <span id="外设状态条" class="外设状态">${外设是否未保存() ? '有未保存的更改' : '已同步'}</span>
@@ -675,204 +793,24 @@ async function 设置_主题() {
 
     <div class="外设双栏">
       <div class="外设左列">
-        <div class="外设卡">
-          <div class="外设卡头"><h3>外观（全局）</h3><small>作用于后台全部页面</small></div>
-          <div class="外设行">
-            <div class="外设标签">主题模式<small>本设备独立记忆</small></div>
-            <div class="外设控件">${外设分段HTML('theme', [['明亮','明亮'],['暗黑','暗黑'],['跟随系统','跟随系统']], c.theme)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">强调色</div>
-            <div class="外设控件">
-              <div class="外设色板">
-                ${外设强调色列表.map(col => `<button type="button" class="外设色点 ${c.accent === col ? '选中' : ''}" style="background:${col}" onclick="外设选('accent','${col}')" title="${col}"></button>`).join('')}
-                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设调色('accent',this.value)" onchange="外设选('accent',this.value)" title="自定义颜色">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="外设卡">
-          <div class="外设卡头"><h3>登录页背景</h3><small>支持图片 / GIF / 短视频 (≤20MB)</small></div>
-          <div class="外设行 顶对齐">
-            <div class="外设标签">背景图片<small>电脑 / 手机独立配置</small></div>
-            <div class="外设控件">
-              <div class="外设磁贴列 双格">
-                ${外设磁贴HTML('16:9 电脑端', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
-                ${外设磁贴HTML('9:16 手机端', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">背景填充</div>
-            <div class="外设控件">${外设分段HTML('bgFit', [['fill','铺满裁切'],['fit','完整显示']], c.bgFit)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">遮罩强度</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="0" max="80" value="${c.overlay}" oninput="外设滑('overlay',this.value)">
-                <span class="外设滑块值" id="外设值_overlay">${c.overlay}%</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">自动对比度<small>依据背景明暗微调</small></div>
-            <div class="外设控件">
-              <label class="外设开关"><input type="checkbox" ${c.autoContrast ? 'checked' : ''} onchange="外设开('autoContrast',this.checked)"><span class="外设开关轨"></span></label>
-            </div>
-          </div>
-        </div>
-
-        <div class="外设卡">
-          <div class="外设卡头"><h3>标题与表单</h3><small>PS 级图层样式、透明玻璃表单与自定义 CSS</small></div>
-          <div class="外设行 顶对齐">
-            <div class="外设标签">标题图 Logo<small>推荐透明背景 PNG</small></div>
-            <div class="外设控件">
-              <div class="外设磁贴列 单格">
-                ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">Logo 颜色<small>透明底 PNG 任意染色</small></div>
-            <div class="外设控件">
-              <input type="color" id="外设Logo取色" class="外设取色" value="${c.logoTint || '#f6d594'}" oninput="外设调色('logoTint',this.value)" onchange="外设调色('logoTint',this.value)" title="选择 Logo 染色">
-              <button type="button" class="外设小钮" onclick="外设调色('logoTint','#ffffff')">纯白</button>
-              <button type="button" class="外设小钮" onclick="外设调色('logoTint','#1f2329')">深黑</button>
-              <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原原图</button>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">Logo 描边</div>
-            <div class="外设控件">
-              <input type="color" class="外设取色" value="${c.logoStrokeColor || '#000000'}" oninput="外设调色('logoStrokeColor',this.value)" onchange="外设调色('logoStrokeColor',this.value)" title="描边颜色">
-              <div class="外设滑块组" style="flex:1">
-                <input type="range" min="0" max="4" step="0.5" value="${c.logoStroke || 0}" oninput="外设滑('logoStroke',this.value)">
-                <span class="外设滑块值" id="外设值_logoStroke">${c.logoStroke || 0}px</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">Logo 阴影</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="0" max="28" value="${c.logoShadow ?? 10}" oninput="外设滑('logoShadow',this.value)">
-                <span class="外设滑块值" id="外设值_logoShadow">${c.logoShadow ?? 10}px</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">标题大小</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="40" max="250" value="${c.logoSize}" oninput="外设滑('logoSize',this.value)">
-                <span class="外设滑块值" id="外设值_logoSize">${c.logoSize}%</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">标题位置</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="4" max="40" value="${c.titleY}" oninput="外设滑('titleY',this.value)">
-                <span class="外设滑块值" id="外设值_titleY">${c.titleY}%</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">双线英文<small>标题下方双线中间文字</small></div>
-            <div class="外设控件" style="flex-wrap:nowrap">
-              <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
-              <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">双线字号 / 字距</div>
-            <div class="外设控件" style="flex-direction:column;align-items:stretch;gap:6px">
-              <div class="外设滑块组">
-                <input type="range" min="10" max="24" value="${c.subSize || 13}" oninput="外设滑('subSize',this.value)">
-                <span class="外设滑块值" id="外设值_subSize">${c.subSize || 13}px</span>
-              </div>
-              <div class="外设滑块组">
-                <input type="range" min="10" max="80" value="${c.subTracking || 42}" oninput="外设滑('subTracking',this.value)">
-                <span class="外设滑块值" id="外设值_subTracking">${((c.subTracking || 42) / 100).toFixed(2)}em</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">英文小标语<small>双线下方小字</small></div>
-            <div class="外设控件" style="flex-wrap:nowrap">
-              <label class="外设开关"><input type="checkbox" ${c.showDesc !== false ? 'checked' : ''} onchange="外设开('showDesc',this.checked)"><span class="外设开关轨"></span></label>
-              <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">文字颜色与字重</div>
-            <div class="外设控件">
-              <input type="color" class="外设取色" value="${c.textColor || '#ffffff'}" oninput="外设调色('textColor',this.value)" onchange="外设调色('textColor',this.value)" title="文字颜色">
-              ${外设分段HTML('textWeight', [['300','细体'],['400','常规'],['600','中粗'],['700','粗体']], String(c.textWeight || '500'))}
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">文字描边 / 阴影</div>
-            <div class="外设控件" style="flex-direction:column;align-items:stretch;gap:6px">
-              <div class="外设控件" style="flex-wrap:nowrap">
-                <input type="color" class="外设取色" value="${c.textStrokeColor || '#000000'}" oninput="外设调色('textStrokeColor',this.value)" onchange="外设调色('textStrokeColor',this.value)" title="文字描边颜色">
-                <div class="外设滑块组" style="flex:1">
-                  <input type="range" min="0" max="2" step="0.3" value="${c.textStroke || 0}" oninput="外设滑('textStroke',this.value)">
-                  <span class="外设滑块值" id="外设值_textStroke">${c.textStroke || 0}px</span>
-                </div>
-              </div>
-              <div class="外设滑块组">
-                <input type="range" min="0" max="24" value="${c.textShadow ?? 8}" oninput="外设滑('textShadow',this.value)">
-                <span class="外设滑块值" id="外设值_textShadow">${c.textShadow ?? 8}px</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">表单位置</div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="40" max="86" value="${c.formY}" oninput="外设滑('formY',this.value)">
-                <span class="外设滑块值" id="外设值_formY">${c.formY}%</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">玻璃模糊度<small>透明玻璃表单磨砂强度</small></div>
-            <div class="外设控件">
-              <div class="外设滑块组">
-                <input type="range" min="0" max="16" value="${c.blur}" oninput="外设滑('blur',this.value)">
-                <span class="外设滑块值" id="外设值_blur">${c.blur}px</span>
-              </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">底部备案信息</div>
-            <div class="外设控件">
-              <label class="外设开关"><input type="checkbox" ${c.showFoot ? 'checked' : ''} onchange="外设开('showFoot',this.checked)"><span class="外设开关轨"></span></label>
-            </div>
-          </div>
-          <div class="外设行 顶对齐">
-            <div class="外设标签">自定义 CSS<small>高级自由样式<br>.双线英 .双线副 .登录卡 .登录钮</small></div>
-            <div class="外设控件">
-              <textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线副 { letter-spacing: 0.3em; }">${转义(c.customCss || '')}</textarea>
-            </div>
-          </div>
-        </div>
+        <nav class="外设页签栏" role="tablist">${页签HTML}</nav>
+        ${外观面板}
+        ${背景面板}
+        ${标题面板}
+        ${表单面板}
+        ${高级面板}
       </div>
 
-      <div class="外设预览区">
+      <aside class="外设预览区">
         <div class="外设预览卡">
           <div class="外设预览顶">
             <span>实时预览</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="外设预览操作">
               <div class="外设分段">
                 <button type="button" id="外设切手机钮" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
                 <button type="button" id="外设切电脑钮" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
               </div>
-              <button type="button" class="外设小钮" onclick="外设放大预览()">放大预览</button>
+              <button type="button" class="外设小钮" onclick="外设放大预览()">放大</button>
             </div>
           </div>
           <div class="外设预览壳" id="外设预览壳" ondblclick="外设放大预览()" title="双击可放大预览">
@@ -882,8 +820,8 @@ async function 设置_主题() {
               <div class="外设预览遮罩" id="外设预览遮罩"></div>
               <div class="外设预览标题区 双线头部" id="外设预览标题区">
                 <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图"></div></div>
-                <div class="外设预览双线 双线英" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-                <div class="外设预览标语 双线副" id="外设预览标语">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+                <div class="外设预览双线 双线英" id="外设预览双线"><i></i><em id="外设预览双线字">${副标题}</em><i></i></div>
+                <div class="外设预览标语 双线副" id="外设预览标语">${标语}</div>
               </div>
               <div class="外设预览表单 登录卡" id="外设预览表单">
                 <div class="外设预览假框">账号 / Account</div>
@@ -895,10 +833,10 @@ async function 设置_主题() {
           </div>
           <div class="外设预览提示">
             <span id="外设预览尺寸提示">${外设预览设备 === 'desktop' ? '16:10 桌面视图' : '9:16 手机视图'}</span>
-            <span>保存后即刻同步登录页</span>
+            <span>保存后同步登录页</span>
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   </div>`;
 }
