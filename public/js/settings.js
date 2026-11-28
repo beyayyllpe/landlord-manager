@@ -263,15 +263,25 @@ function 默认外观配置() {
     blur: 10,
     autoContrast: true,
     logoSize: 100,
-    logoTone: 'original',
+    logoTint: '',
+    logoStroke: 0,
+    logoStrokeColor: '#000000',
+    logoShadow: 10,
     titleY: 28,
     formY: 62,
-    formStyle: 'glass',
-    textTone: 'auto',
+    textColor: '#ffffff',
+    textWeight: '500',
+    textStroke: 0,
+    textStrokeColor: '#000000',
+    textShadow: 8,
     subtitle: 'Rental Keeper',
     subDesc: 'Property · Billing · Occupancy',
+    subSize: 13,
+    subTracking: 42,
     showSub: true,
-    showFoot: true
+    showDesc: true,
+    showFoot: true,
+    customCss: ''
   };
 }
 
@@ -313,15 +323,46 @@ function 更新外设状态条() {
   el.classList.toggle('脏', 脏);
 }
 
+function 生成Logo滤镜(stroke, strokeColor, shadow) {
+  const parts = [];
+  const s = Number(stroke) || 0;
+  const sc = strokeColor || '#000000';
+  if (s > 0) {
+    const dirs = [[s,0],[-s,0],[0,s],[0,-s],[s*0.7,s*0.7],[-s*0.7,s*0.7],[s*0.7,-s*0.7],[-s*0.7,-s*0.7]];
+    dirs.forEach(([x, y]) => parts.push(`drop-shadow(${x.toFixed(1)}px ${y.toFixed(1)}px 0 ${sc})`));
+  }
+  const sh = Number(shadow) || 0;
+  if (sh > 0) parts.push(`drop-shadow(0 3px ${sh}px rgba(0,0,0,0.62))`);
+  return parts.length ? parts.join(' ') : 'none';
+}
+
+function 应用预览自定义CSS(cssText) {
+  let styleEl = document.getElementById('外设预览自定义CSS');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = '外设预览自定义CSS';
+    document.head.appendChild(styleEl);
+  }
+  const raw = String(cssText || '').trim();
+  if (!raw) { styleEl.textContent = ''; return; }
+  styleEl.textContent = raw.replace(/([^{}]+)\{/g, (_, sel) => {
+    const scoped = sel.split(',').map(s => {
+      const t = s.trim();
+      if (!t || t.startsWith('@')) return t;
+      return `#外设预览舞台 ${t}, #外设预览舞台_大 ${t}`;
+    }).join(', ');
+    return `${scoped} {`;
+  });
+}
+
 function 渲染预览舞台到(后缀) {
   const shell = document.getElementById('外设预览壳' + 后缀);
   const stage = document.getElementById('外设预览舞台' + 后缀);
   if (!shell || !stage || !外设草稿) return;
   const c = 外设草稿;
   const 是电脑 = 外设预览设备 === 'desktop';
-  const 偏暗字 = c.textTone === 'dark';
   shell.className = '外设预览壳' + (是电脑 ? ' 电脑' : '');
-  stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '') + (偏暗字 ? ' 深色字' : '');
+  stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '');
   stage.style.setProperty('--preview-accent', c.accent || '#18181b');
 
   const 基准宽 = 是电脑 ? 1280 : 390;
@@ -348,49 +389,82 @@ function 渲染预览舞台到(后缀) {
   const mask = document.getElementById('外设预览遮罩' + 后缀);
   if (mask) mask.style.background = `rgba(10, 12, 14, ${(Number(c.overlay) || 0) / 100})`;
 
-  const toneColor = c.textTone === 'dark' ? '#1f2329' : (c.textTone === 'light' ? '#ffffff' : (Number(c.overlay) < 15 && c.autoContrast ? '#f8fafc' : '#ffffff'));
+  const tc = c.textColor || '#ffffff';
+  const tw = c.textWeight || '500';
+  const ts = Number(c.textStroke) || 0;
+  const tsc = c.textStrokeColor || '#000000';
+  const tsh = Number(c.textShadow) || 0;
+  const textShadowCss = tsh > 0 ? `0 2px ${tsh}px rgba(0,0,0,0.65)` : 'none';
+  const textStrokeCss = ts > 0 ? `${ts}px ${tsc}` : '0';
+
   const titleBox = document.getElementById('外设预览标题区' + 后缀);
   if (titleBox) {
     titleBox.style.top = `${c.titleY}%`;
-    titleBox.style.color = toneColor;
+    titleBox.style.color = tc;
+    titleBox.style.fontWeight = tw;
+    titleBox.style.textShadow = textShadowCss;
+    titleBox.style.webkitTextStroke = textStrokeCss;
   }
+
+  const logoWrap = document.getElementById('外设预览Logo盒' + 后缀);
+  const logoTintBox = document.getElementById('外设预览Logo着色' + 后缀);
   const logoImg = document.getElementById('外设预览Logo' + 后缀);
-  if (logoImg) {
+  if (logoWrap && logoTintBox && logoImg) {
     const scale = (Number(c.logoSize) || 100) / 100;
-    logoImg.style.transform = `scale(${scale})`;
-    logoImg.style.transformOrigin = 'center center';
-    logoImg.style.filter = c.logoTone === 'light' ? 'brightness(0) invert(1)' : (c.logoTone === 'dark' ? 'brightness(0)' : 'none');
+    logoWrap.style.transform = `scale(${scale})`;
+    logoWrap.style.transformOrigin = 'center center';
+    logoWrap.style.filter = 生成Logo滤镜(c.logoStroke, c.logoStrokeColor, c.logoShadow);
+    const tint = String(c.logoTint || '').trim();
+    if (tint) {
+      const src = logoImg.getAttribute('src') || '';
+      logoTintBox.style.backgroundColor = tint;
+      logoTintBox.style.webkitMask = `url("${src}") center / contain no-repeat`;
+      logoTintBox.style.mask = `url("${src}") center / contain no-repeat`;
+      logoImg.style.opacity = '0';
+    } else {
+      logoTintBox.style.backgroundColor = 'transparent';
+      logoTintBox.style.webkitMask = 'none';
+      logoTintBox.style.mask = 'none';
+      logoImg.style.opacity = '1';
+    }
   }
+
   const subBox = document.getElementById('外设预览双线' + 后缀);
   const subTxt = document.getElementById('外设预览双线字' + 后缀);
   const subDesc = document.getElementById('外设预览标语' + 后缀);
   if (subBox) subBox.style.display = c.showSub ? 'flex' : 'none';
-  if (subTxt) subTxt.textContent = String(c.subtitle ?? 'Rental Keeper').trim();
+  if (subTxt) {
+    subTxt.textContent = String(c.subtitle ?? 'Rental Keeper').trim();
+    subTxt.style.fontSize = `${Number(c.subSize) || 13}px`;
+    const tr = ((Number(c.subTracking) || 42) / 100).toFixed(2) + 'em';
+    subTxt.style.letterSpacing = tr;
+    subTxt.style.paddingLeft = tr;
+  }
   if (subDesc) {
     const descTxt = String(c.subDesc ?? 'Property · Billing · Occupancy').trim();
-    subDesc.style.display = (c.showSub && descTxt) ? 'block' : 'none';
+    subDesc.style.display = (c.showDesc !== false && descTxt) ? 'block' : 'none';
     subDesc.textContent = descTxt;
   }
 
   const formBox = document.getElementById('外设预览表单' + 后缀);
   if (formBox) {
     formBox.style.top = `${c.formY}%`;
-    formBox.className = `外设预览表单 样式-${c.formStyle || 'glass'}`;
     stage.style.setProperty('--preview-blur', `${Number(c.blur) || 0}px`);
-    formBox.style.backdropFilter = c.formStyle === 'glass' ? 'none' : 'none';
-    formBox.style.webkitBackdropFilter = 'none';
-    if (c.formStyle !== 'solid') formBox.style.color = toneColor;
-    else formBox.style.color = '#1f2329';
+    formBox.style.color = tc;
+    formBox.style.fontWeight = tw;
+    formBox.style.textShadow = textShadowCss;
   }
 
   const foot = document.getElementById('外设预览备案' + 后缀);
   if (foot) {
     foot.style.display = c.showFoot ? 'block' : 'none';
-    foot.style.color = toneColor;
+    foot.style.color = tc;
+    foot.style.textShadow = textShadowCss;
   }
 }
 
 function 更新外设预览() {
+  if (外设草稿) 应用预览自定义CSS(外设草稿.customCss);
   渲染预览舞台到('');
   渲染预览舞台到('_大');
   const tip = document.getElementById('外设预览尺寸提示');
@@ -398,10 +472,18 @@ function 更新外设预览() {
   更新外设状态条();
 }
 
-function 外设调色(值) {
+function 外设调色(键, 值) {
   if (!外设草稿) return;
-  外设草稿.accent = 值;
-  应用全局外观(外设草稿);
+  外设草稿[键] = 值;
+  if (键 === 'accent') 应用全局外观(外设草稿);
+  更新外设预览();
+}
+
+function 外设清除Logo色() {
+  if (!外设草稿) return;
+  外设草稿.logoTint = '';
+  const inp = document.getElementById('外设Logo取色');
+  if (inp) inp.value = '#f6d594';
   更新外设预览();
 }
 
@@ -427,17 +509,17 @@ function 外设放大预览() {
           <img class="外设预览底模糊" id="外设预览底模糊_大" alt="">
           <img class="外设预览底图" id="外设预览底图_大" alt="">
           <div class="外设预览遮罩" id="外设预览遮罩_大"></div>
-          <div class="外设预览标题区" id="外设预览标题区_大">
-            <img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图">
-            <div class="外设预览双线" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-            <div class="外设预览标语" id="外设预览标语_大">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+          <div class="外设预览标题区 双线头部" id="外设预览标题区_大">
+            <div class="Logo滤镜盒" id="外设预览Logo盒_大"><div class="Logo着色层" id="外设预览Logo着色_大"><img class="外设预览Logo" id="外设预览Logo_大" src="${logoSrc}" alt="标题图"></div></div>
+            <div class="外设预览双线 双线英" id="外设预览双线_大"><i></i><em id="外设预览双线字_大">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+            <div class="外设预览标语 双线副" id="外设预览标语_大">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
           </div>
-          <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单_大">
+          <div class="外设预览表单 登录卡" id="外设预览表单_大">
             <div class="外设预览假框">账号 / Account</div>
             <div class="外设预览假框">密码 / Password</div>
-            <div class="外设预览假钮">登 录</div>
+            <div class="外设预览假钮 登录钮">登 录</div>
           </div>
-          <div class="外设预览备案" id="外设预览备案_大">备案号示例 · 租房管家</div>
+          <div class="外设预览备案 备案底栏" id="外设预览备案_大">备案号示例 · 租房管家</div>
         </div>
       </div>
     </div>`;
@@ -468,7 +550,11 @@ function 外设滑(键, 值) {
   if (!外设草稿) return;
   外设草稿[键] = Number(值);
   const lab = document.getElementById(`外设值_${键}`);
-  if (lab) lab.textContent = 键 === 'blur' ? `${值}px` : `${值}%`;
+  if (lab) {
+    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize'].includes(键)) lab.textContent = `${值}px`;
+    else if (键 === 'subTracking') lab.textContent = `${(Number(值) / 100).toFixed(2)}em`;
+    else lab.textContent = `${值}%`;
+  }
   更新外设预览();
 }
 
@@ -600,7 +686,7 @@ async function 设置_主题() {
             <div class="外设控件">
               <div class="外设色板">
                 ${外设强调色列表.map(col => `<button type="button" class="外设色点 ${c.accent === col ? '选中' : ''}" style="background:${col}" onclick="外设选('accent','${col}')" title="${col}"></button>`).join('')}
-                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设调色(this.value)" onchange="外设选('accent',this.value)" title="自定义颜色">
+                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设调色('accent',this.value)" onchange="外设选('accent',this.value)" title="自定义颜色">
               </div>
             </div>
           </div>
@@ -639,7 +725,7 @@ async function 设置_主题() {
         </div>
 
         <div class="外设卡">
-          <div class="外设卡头"><h3>标题与表单</h3><small>登录页标题、输入框与页脚排版</small></div>
+          <div class="外设卡头"><h3>标题与表单</h3><small>PS 级图层样式、透明玻璃表单与自定义 CSS</small></div>
           <div class="外设行 顶对齐">
             <div class="外设标签">标题图 Logo<small>推荐透明背景 PNG</small></div>
             <div class="外设控件">
@@ -649,8 +735,32 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">Logo 颜色<small>透明底文字图可一键变色</small></div>
-            <div class="外设控件">${外设分段HTML('logoTone', [['original','保持原图'],['light','浅白色'],['dark','深黑色']], c.logoTone || 'original')}</div>
+            <div class="外设标签">Logo 颜色<small>透明底 PNG 任意染色</small></div>
+            <div class="外设控件">
+              <input type="color" id="外设Logo取色" class="外设取色" value="${c.logoTint || '#f6d594'}" oninput="外设调色('logoTint',this.value)" onchange="外设调色('logoTint',this.value)" title="选择 Logo 染色">
+              <button type="button" class="外设小钮" onclick="外设调色('logoTint','#ffffff')">纯白</button>
+              <button type="button" class="外设小钮" onclick="外设调色('logoTint','#1f2329')">深黑</button>
+              <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原原图</button>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">Logo 描边</div>
+            <div class="外设控件">
+              <input type="color" class="外设取色" value="${c.logoStrokeColor || '#000000'}" oninput="外设调色('logoStrokeColor',this.value)" onchange="外设调色('logoStrokeColor',this.value)" title="描边颜色">
+              <div class="外设滑块组" style="flex:1">
+                <input type="range" min="0" max="4" step="0.5" value="${c.logoStroke || 0}" oninput="外设滑('logoStroke',this.value)">
+                <span class="外设滑块值" id="外设值_logoStroke">${c.logoStroke || 0}px</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">Logo 阴影</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="0" max="28" value="${c.logoShadow ?? 10}" oninput="外设滑('logoShadow',this.value)">
+                <span class="外设滑块值" id="外设值_logoShadow">${c.logoShadow ?? 10}px</span>
+              </div>
+            </div>
           </div>
           <div class="外设行">
             <div class="外设标签">标题大小</div>
@@ -671,16 +781,53 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">双线英文<small>显示在标题下方双线中间</small></div>
+            <div class="外设标签">双线英文<small>标题下方双线中间文字</small></div>
             <div class="外设控件" style="flex-wrap:nowrap">
               <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
               <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">英文小标语<small>双线下方小字（留空隐藏）</small></div>
-            <div class="外设控件">
+            <div class="外设标签">双线字号 / 字距</div>
+            <div class="外设控件" style="flex-direction:column;align-items:stretch;gap:6px">
+              <div class="外设滑块组">
+                <input type="range" min="10" max="24" value="${c.subSize || 13}" oninput="外设滑('subSize',this.value)">
+                <span class="外设滑块值" id="外设值_subSize">${c.subSize || 13}px</span>
+              </div>
+              <div class="外设滑块组">
+                <input type="range" min="10" max="80" value="${c.subTracking || 42}" oninput="外设滑('subTracking',this.value)">
+                <span class="外设滑块值" id="外设值_subTracking">${((c.subTracking || 42) / 100).toFixed(2)}em</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">英文小标语<small>双线下方小字</small></div>
+            <div class="外设控件" style="flex-wrap:nowrap">
+              <label class="外设开关"><input type="checkbox" ${c.showDesc !== false ? 'checked' : ''} onchange="外设开('showDesc',this.checked)"><span class="外设开关轨"></span></label>
               <input type="text" class="外设输入框" value="${转义(c.subDesc || 'Property · Billing · Occupancy')}" maxlength="60" oninput="外设字('subDesc',this.value)" placeholder="Property · Billing · Occupancy">
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">文字颜色与字重</div>
+            <div class="外设控件">
+              <input type="color" class="外设取色" value="${c.textColor || '#ffffff'}" oninput="外设调色('textColor',this.value)" onchange="外设调色('textColor',this.value)" title="文字颜色">
+              ${外设分段HTML('textWeight', [['300','细体'],['400','常规'],['600','中粗'],['700','粗体']], String(c.textWeight || '500'))}
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">文字描边 / 阴影</div>
+            <div class="外设控件" style="flex-direction:column;align-items:stretch;gap:6px">
+              <div class="外设控件" style="flex-wrap:nowrap">
+                <input type="color" class="外设取色" value="${c.textStrokeColor || '#000000'}" oninput="外设调色('textStrokeColor',this.value)" onchange="外设调色('textStrokeColor',this.value)" title="文字描边颜色">
+                <div class="外设滑块组" style="flex:1">
+                  <input type="range" min="0" max="2" step="0.3" value="${c.textStroke || 0}" oninput="外设滑('textStroke',this.value)">
+                  <span class="外设滑块值" id="外设值_textStroke">${c.textStroke || 0}px</span>
+                </div>
+              </div>
+              <div class="外设滑块组">
+                <input type="range" min="0" max="24" value="${c.textShadow ?? 8}" oninput="外设滑('textShadow',this.value)">
+                <span class="外设滑块值" id="外设值_textShadow">${c.textShadow ?? 8}px</span>
+              </div>
             </div>
           </div>
           <div class="外设行">
@@ -693,11 +840,7 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">表单样式</div>
-            <div class="外设控件">${外设分段HTML('formStyle', [['glass','透明玻璃'],['solid','实色卡片'],['outline','极简描边']], c.formStyle)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">表单模糊</div>
+            <div class="外设标签">玻璃模糊度<small>透明玻璃表单磨砂强度</small></div>
             <div class="外设控件">
               <div class="外设滑块组">
                 <input type="range" min="0" max="16" value="${c.blur}" oninput="外设滑('blur',this.value)">
@@ -706,13 +849,15 @@ async function 设置_主题() {
             </div>
           </div>
           <div class="外设行">
-            <div class="外设标签">文字颜色</div>
-            <div class="外设控件">${外设分段HTML('textTone', [['auto','自动'],['light','浅色'],['dark','深色']], c.textTone)}</div>
-          </div>
-          <div class="外设行">
             <div class="外设标签">底部备案信息</div>
             <div class="外设控件">
               <label class="外设开关"><input type="checkbox" ${c.showFoot ? 'checked' : ''} onchange="外设开('showFoot',this.checked)"><span class="外设开关轨"></span></label>
+            </div>
+          </div>
+          <div class="外设行 顶对齐">
+            <div class="外设标签">自定义 CSS<small>高级自由样式<br>.双线英 .双线副 .登录卡 .登录钮</small></div>
+            <div class="外设控件">
+              <textarea class="外设代码框" oninput="外设字('customCss',this.value)" placeholder="示例：\n.双线英 { color: #f6d594; font-weight: 700; }\n.双线副 { letter-spacing: 0.3em; }">${转义(c.customCss || '')}</textarea>
             </div>
           </div>
         </div>
@@ -735,17 +880,17 @@ async function 设置_主题() {
               <img class="外设预览底模糊" id="外设预览底模糊" alt="">
               <img class="外设预览底图" id="外设预览底图" alt="">
               <div class="外设预览遮罩" id="外设预览遮罩"></div>
-              <div class="外设预览标题区" id="外设预览标题区">
-                <img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图">
-                <div class="外设预览双线" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
-                <div class="外设预览标语" id="外设预览标语">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
+              <div class="外设预览标题区 双线头部" id="外设预览标题区">
+                <div class="Logo滤镜盒" id="外设预览Logo盒"><div class="Logo着色层" id="外设预览Logo着色"><img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图"></div></div>
+                <div class="外设预览双线 双线英" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+                <div class="外设预览标语 双线副" id="外设预览标语">${转义(c.subDesc || 'Property · Billing · Occupancy')}</div>
               </div>
-              <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单">
+              <div class="外设预览表单 登录卡" id="外设预览表单">
                 <div class="外设预览假框">账号 / Account</div>
                 <div class="外设预览假框">密码 / Password</div>
-                <div class="外设预览假钮">登 录</div>
+                <div class="外设预览假钮 登录钮">登 录</div>
               </div>
-              <div class="外设预览备案" id="外设预览备案">备案号示例 · 租房管家</div>
+              <div class="外设预览备案 备案底栏" id="外设预览备案">备案号示例 · 租房管家</div>
             </div>
           </div>
           <div class="外设预览提示">

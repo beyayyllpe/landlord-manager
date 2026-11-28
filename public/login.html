@@ -564,12 +564,34 @@
             const logo = document.getElementById('登录标题图');
             if (logo) logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
           }
-          if (wg.logoTone === 'light') {
-            const logo = document.getElementById('登录标题图');
-            if (logo) { logo.classList.remove('默认白'); logo.style.filter = 'brightness(0) invert(1)'; }
-          } else if (wg.logoTone === 'dark') {
-            const logo = document.getElementById('登录标题图');
-            if (logo) { logo.classList.remove('默认白'); logo.style.filter = 'brightness(0)'; }
+          const logoEl = document.getElementById('登录标题图');
+          if (logoEl) {
+            const parts = [];
+            const ls = Number(wg.logoStroke) || 0;
+            const lsc = wg.logoStrokeColor || '#000000';
+            if (ls > 0) {
+              [[ls,0],[-ls,0],[0,ls],[0,-ls],[ls*0.7,ls*0.7],[-ls*0.7,ls*0.7],[ls*0.7,-ls*0.7],[-ls*0.7,-ls*0.7]]
+                .forEach(([x, y]) => parts.push(`drop-shadow(${x.toFixed(1)}px ${y.toFixed(1)}px 0 ${lsc})`));
+            }
+            const lsh = Number(wg.logoShadow);
+            if (lsh > 0) parts.push(`drop-shadow(0 3px ${lsh}px rgba(0,0,0,0.62))`);
+            if (wg.logoTint) {
+              logoEl.classList.remove('默认白');
+              const wrap = document.createElement('div');
+              wrap.style.cssText = `display:inline-flex;align-items:center;justify-content:center;filter:${parts.join(' ') || 'none'}`;
+              const maskBox = document.createElement('div');
+              const applyMask = () => {
+                maskBox.style.cssText = `display:inline-flex;background:${wg.logoTint};-webkit-mask:url("${logoEl.src}") center/contain no-repeat;mask:url("${logoEl.src}") center/contain no-repeat;`;
+              };
+              logoEl.parentNode.insertBefore(wrap, logoEl);
+              wrap.appendChild(maskBox);
+              maskBox.appendChild(logoEl);
+              logoEl.style.opacity = '0';
+              logoEl.addEventListener('load', applyMask);
+              applyMask();
+            } else if (parts.length) {
+              logoEl.style.filter = parts.join(' ');
+            }
           }
           if (typeof wg.titleY === 'number') {
             const hd = document.querySelector('.双线头部');
@@ -592,24 +614,53 @@
               card.style.zIndex = '2';
             }
           }
-          if (wg.showSub === false) {
-            const sub1 = document.querySelector('.双线英');
-            const sub2 = document.querySelector('.双线副');
-            if (sub1) sub1.style.display = 'none';
-            if (sub2) sub2.style.display = 'none';
-          } else {
-            if (wg.subtitle) {
-              const subSpan = document.querySelector('.双线英 span');
-              if (subSpan) subSpan.textContent = String(wg.subtitle).trim();
-            }
-            if (wg.subDesc) {
-              const subDescEl = document.querySelector('.双线副');
-              if (subDescEl) subDescEl.textContent = String(wg.subDesc).trim();
+          const sub1 = document.querySelector('.双线英');
+          const sub2 = document.querySelector('.双线副');
+          if (sub1) sub1.style.display = wg.showSub === false ? 'none' : 'flex';
+          if (sub2) sub2.style.display = wg.showDesc === false ? 'none' : 'block';
+          if (wg.subtitle) {
+            const subSpan = document.querySelector('.双线英 span');
+            if (subSpan) subSpan.textContent = String(wg.subtitle).trim();
+          }
+          if (typeof wg.subDesc === 'string') {
+            if (sub2) {
+              sub2.textContent = wg.subDesc.trim();
+              if (!wg.subDesc.trim()) sub2.style.display = 'none';
             }
           }
-          if (wg.formStyle === 'solid') document.body.classList.add('表单实色');
-          else if (wg.formStyle === 'outline') document.body.classList.add('表单描边');
-          if (wg.textTone === 'dark') document.body.classList.add('文字深色');
+          if (wg.subSize && sub1) sub1.style.fontSize = wg.subSize + 'px';
+          if (wg.subTracking && sub1) {
+            const tr = (Number(wg.subTracking) / 100).toFixed(2) + 'em';
+            sub1.style.letterSpacing = tr;
+            const sp = sub1.querySelector('span');
+            if (sp) sp.style.paddingLeft = tr;
+          }
+          if (wg.textColor || wg.textWeight || wg.textStroke || wg.textShadow !== undefined) {
+            const tc = wg.textColor || '#ffffff';
+            const tw = wg.textWeight || '500';
+            const ts = Number(wg.textStroke) || 0;
+            const tsc = wg.textStrokeColor || '#000000';
+            const tsh = wg.textShadow !== undefined ? Number(wg.textShadow) : 8;
+            const shCss = tsh > 0 ? `0 2px ${tsh}px rgba(0,0,0,0.65)` : 'none';
+            const stCss = ts > 0 ? `${ts}px ${tsc}` : '0';
+            const st = document.createElement('style');
+            st.textContent = `
+              body.有背景 .双线头部, body.有背景 .双线英, body.有背景 .双线副, body.有背景 .备案底栏 {
+                color: ${tc}; font-weight: ${tw}; text-shadow: ${shCss}; -webkit-text-stroke: ${stCss};
+              }
+              body.有背景 .输入盒 input, body.有背景 .登录钮 {
+                color: ${tc}; font-weight: ${tw}; text-shadow: ${shCss};
+              }
+              body.有背景 .输入盒 input::placeholder { color: ${tc}; opacity: .72; }
+            `;
+            document.head.appendChild(st);
+          }
+          if (wg.customCss && String(wg.customCss).trim()) {
+            const cst = document.createElement('style');
+            cst.id = '自定义登录CSS';
+            cst.textContent = String(wg.customCss);
+            document.head.appendChild(cst);
+          }
           if (wg.autoContrast === false) {
             document.documentElement.style.setProperty('--auto-shadow', 'none');
           }

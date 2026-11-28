@@ -2649,13 +2649,20 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   gap: 16px;
 }
 .外设顶栏 {
+  position: sticky;
+  top: 56px;
+  z-index: 20;
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  padding-bottom: 12px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
+}
+.外设预览区 {
+  top: 136px;
 }
 .外设顶栏标题 h2 { margin: 0 0 2px; font-size: 18px; }
 .外设顶栏标题 p { margin: 0; font-size: 12.5px; color: var(--ink-2); }
@@ -2851,6 +2858,30 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   font: inherit;
   font-size: 13px;
 }
+.外设代码框 {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.Logo滤镜盒 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 82%;
+}
+.Logo着色层 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* 右侧实时预览舞台 */
 .外设预览区 {
@@ -2949,8 +2980,9 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   position: absolute; left: 50%;
   transform: translate(-50%, -50%);
   width: 310px;
-  padding: 22px 20px;
-  border-radius: 18px;
+  padding: 0;
+  background: transparent;
+  border: 0;
   display: flex; flex-direction: column; gap: 12px;
 }
 .外设预览舞台.电脑 .外设预览表单 { width: 320px; }
@@ -2958,13 +2990,10 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   height: 46px; border-radius: 23px;
   border: 1px solid rgba(255, 255, 255, .34);
   background: rgba(18, 20, 24, .24);
+  backdrop-filter: blur(var(--preview-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--preview-blur, 10px));
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; letter-spacing: .12em; opacity: .88;
-}
-.外设预览表单.样式-solid .外设预览假框 {
-  border-color: rgba(0,0,0,.14);
-  background: rgba(0,0,0,.04);
-  color: #444;
 }
 .外设预览假钮 {
   height: 46px; border-radius: 23px;
@@ -2972,12 +3001,9 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600; letter-spacing: .5em; padding-left: .5em;
   background: rgba(255, 255, 255, .14);
+  backdrop-filter: blur(var(--preview-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--preview-blur, 10px));
   border: 1px solid rgba(255, 255, 255, .42);
-}
-.外设预览表单.样式-solid .外设预览假钮 {
-  background: var(--preview-accent, #18181b);
-  color: #fff;
-  border-color: transparent;
 }
 .外设预览备案 {
   position: absolute; left: 0; right: 0; bottom: 18px;
