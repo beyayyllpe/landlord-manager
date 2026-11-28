@@ -2908,8 +2908,23 @@ body.still *, body.still *::before, body.still *::after {
 .外设取色 { width: 28px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; }
 
 .外设滑块组 { display: flex; align-items: center; gap: 10px; width: 100%; }
-.外设滑块组 input[type="range"] { flex: 1; accent-color: var(--accent, var(--ink)); cursor: pointer; }
+.外设滑块组 input[type="range"], .外设滑块 input[type="range"] { flex: 1; accent-color: var(--ink); cursor: pointer; }
 .外设滑块值 { min-width: 48px; text-align: right; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.外设数字框 {
+  width: 64px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.外设数字框:focus { outline: none; border-color: var(--ink); }
+.外设单位 { font-size: 11.5px; color: var(--ink-2); min-width: 18px; }
 
 .外设开关 {
   position: relative;

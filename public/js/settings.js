@@ -613,15 +613,15 @@ function 外设选(键, 值, 按钮El) {
   刷新设置详情();
 }
 
-function 外设滑(键, 值) {
+function 外设滑(键, 值, 来源) {
   if (!外设草稿) return;
-  外设草稿[键] = Number(值);
-  const lab = document.getElementById(`外设值_${键}`);
-  if (lab) {
-    if (['blur', 'logoStroke', 'logoShadow', 'textStroke', 'textShadow', 'subSize', 'formWidth', 'inputRadius', 'cardRadius'].includes(键)) lab.textContent = `${值}px`;
-    else if (键 === 'subTracking') lab.textContent = `${(Number(值) / 100).toFixed(2)}em`;
-    else lab.textContent = `${值}%`;
-  }
+  const num = Number(值);
+  if (Number.isNaN(num)) return;
+  外设草稿[键] = num;
+  const rng = document.getElementById(`外设滑_${键}`);
+  const inp = document.getElementById(`外设数_${键}`);
+  if (来源 !== 'range' && rng) rng.value = num;
+  if (来源 !== 'num' && inp) inp.value = num;
   if (['cardRadius', 'fontScale'].includes(键)) 应用全局外观(外设草稿);
   更新外设预览();
 }
@@ -764,10 +764,10 @@ function 外设线HTML(list) {
         <button type="button" class="外设小钮 危" onclick="外设线删(${i})">删除</button>
       </div>
       <div class="外设文格">
-        <label class="外设文项"><span>透明</span><input type="range" min="0" max="100" value="${d.opacity ?? 45}" oninput="外设线改(${i},'opacity',this.value,this)"><output>${d.opacity ?? 45}%</output></label>
-        <label class="外设文项"><span>长度</span><input type="range" min="30" max="200" value="${d.size ?? 100}" oninput="外设线改(${i},'size',this.value,this)"><output>${d.size ?? 100}%</output></label>
-        <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${d.y ?? 45}" oninput="外设线改(${i},'y',this.value,this)"><output>${d.y ?? 45}%</output></label>
-        <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${d.x ?? 50}" oninput="外设线改(${i},'x',this.value,this)"><output>${d.x ?? 50}%</output></label>
+        <label class="外设文项"><span>透明</span><input type="range" min="0" max="100" step="1" value="${d.opacity ?? 45}" oninput="外设线改(${i},'opacity',this.value,this)"><output>${d.opacity ?? 45}%</output></label>
+        <label class="外设文项"><span>长度</span><input type="range" min="10" max="300" step="1" value="${d.size ?? 100}" oninput="外设线改(${i},'size',this.value,this)"><output>${d.size ?? 100}%</output></label>
+        <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${d.y ?? 45}" oninput="外设线改(${i},'y',this.value,this)"><output>${d.y ?? 45}%</output></label>
+        <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${d.x ?? 50}" oninput="外设线改(${i},'x',this.value,this)"><output>${d.x ?? 50}%</output></label>
       </div>
     </div>`).join('');
 }
@@ -824,10 +824,12 @@ function 外设显示值(键, 值) {
 }
 
 function 外设滑块HTML(键, 最小, 最大, 步长, 当前) {
+  const 单位 = ['blur', 'formWidth', 'inputRadius', 'cardRadius'].includes(键) ? 'px' : '%';
   return `
     <div class="外设滑块">
-      <input type="range" min="${最小}" max="${最大}" step="${步长}" value="${当前}" oninput="外设滑('${键}',this.value)">
-      <output class="外设滑块值" id="外设值_${键}">${外设显示值(键, 当前)}</output>
+      <input id="外设滑_${键}" type="range" min="${最小}" max="${最大}" step="${步长}" value="${当前}" oninput="外设滑('${键}',this.value,'range')">
+      <input id="外设数_${键}" class="外设数字框" type="number" min="${最小}" max="${最大}" step="${步长}" value="${当前}" oninput="外设滑('${键}',this.value,'num')">
+      <span class="外设单位">${单位}</span>
     </div>`;
 }
 
@@ -872,10 +874,10 @@ function 外设自由文字HTML(list) {
         <button type="button" class="外设小钮 危" onclick="外设文删(${i})">删除</button>
       </div>
       <div class="外设文格">
-        <label class="外设文项"><span>上下</span><input type="range" min="5" max="92" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
-        <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
-        <label class="外设文项"><span>大小</span><input type="range" min="10" max="36" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
-        <label class="外设文项"><span>间距</span><input type="range" min="0" max="80" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
+        <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${t.y ?? 34}" oninput="外设文改(${i},'y',this.value,this)"><output>${t.y ?? 34}%</output></label>
+        <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${t.x ?? 50}" oninput="外设文改(${i},'x',this.value,this)"><output>${t.x ?? 50}%</output></label>
+        <label class="外设文项"><span>大小</span><input type="range" min="8" max="72" step="1" value="${t.size ?? 13}" oninput="外设文改(${i},'size',this.value,this)"><output>${t.size ?? 13}px</output></label>
+        <label class="外设文项"><span>间距</span><input type="range" min="0" max="120" step="1" value="${t.tracking ?? 20}" oninput="外设文改(${i},'tracking',this.value,this)"><output>${((t.tracking ?? 20)/100).toFixed(2)}em</output></label>
       </div>
     </div>`).join('');
 }
@@ -946,9 +948,9 @@ async function 设置_主题() {
     外设行HTML('减少动效', '关掉过渡和动画，对动效敏感的人会更舒服',
       外设开关HTML('reduceMotion', c.reduceMotion)),
     外设行HTML('卡片圆角', '全局统一调整',
-      外设滑块HTML('cardRadius', 0, 20, 1, c.cardRadius ?? 12)),
+      外设滑块HTML('cardRadius', 0, 32, 1, c.cardRadius ?? 12)),
     外设行HTML('界面字号缩放', '照顾不同分辨率屏幕',
-      外设滑块HTML('fontScale', 90, 120, 2, c.fontScale ?? 100)),
+      外设滑块HTML('fontScale', 75, 150, 1, c.fontScale ?? 100)),
   ].join(''));
 
   const 背景面板 = 面板('bg', [
@@ -960,7 +962,7 @@ async function 设置_主题() {
     外设行HTML('背景填充', '',
       外设分段HTML('bgFit', [['fill', '铺满裁切'], ['fit', '完整显示']], c.bgFit)),
     外设行HTML('遮罩强度', '压暗背景，提升文字可读性',
-      外设滑块HTML('overlay', 0, 80, 1, c.overlay)),
+      外设滑块HTML('overlay', 0, 100, 1, c.overlay)),
   ].join(''));
 
   const Logo面板 = 面板('logo', [
@@ -974,22 +976,22 @@ async function 设置_主题() {
        <button type="button" class="外设小钮" onclick="外设调色('logoTint','#1f2329')">深黑</button>
        <button type="button" class="外设小钮" onclick="外设清除Logo色()">还原</button>`),
     外设行HTML('Logo 大小', '',
-      外设滑块HTML('logoSize', 40, 250, 1, c.logoSize)),
+      外设滑块HTML('logoSize', 10, 400, 1, c.logoSize)),
     外设行HTML('Logo 位置', '距离顶部的百分比',
-      外设滑块HTML('titleY', 4, 40, 1, c.titleY)),
+      外设滑块HTML('titleY', 0, 100, 1, c.titleY)),
   ].join(''));
 
   const 表单面板 = 面板('form', [
     外设行HTML('表单样式', '',
       外设分段HTML('formStyle', [['glass', '玻璃'], ['solid', '实色'], ['outline', '描边'], ['minimal', '极简']], c.formStyle || 'glass')),
     外设行HTML('表单宽度', '',
-      外设滑块HTML('formWidth', 240, 440, 2, c.formWidth || 320)),
+      外设滑块HTML('formWidth', 180, 600, 1, c.formWidth || 320)),
     外设行HTML('表单位置', '距离顶部的百分比',
-      外设滑块HTML('formY', 40, 86, 1, c.formY)),
+      外设滑块HTML('formY', 0, 100, 1, c.formY)),
     外设行HTML('输入框圆角', '',
-      外设滑块HTML('inputRadius', 0, 30, 1, c.inputRadius ?? 23)),
+      外设滑块HTML('inputRadius', 0, 40, 1, c.inputRadius ?? 23)),
     外设行HTML('玻璃模糊', '透明表单的磨砂强度',
-      外设滑块HTML('blur', 0, 16, 1, c.blur)),
+      外设滑块HTML('blur', 0, 40, 1, c.blur)),
     外设行HTML('按钮文字', '',
       `<input type="text" class="外设输入框" value="${转义(c.btnText || '登 录')}" maxlength="20" oninput="外设字('btnText',this.value)" placeholder="登 录">`),
   ].join(''));
@@ -1012,9 +1014,9 @@ async function 设置_主题() {
           <input type="color" class="外设取色" value="${clk.color || '#ffffff'}" oninput="外设件改('clock','color',this.value)" title="时钟颜色">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${clk.y ?? 14}" oninput="外设件改('clock','y',this.value,this)"><output>${clk.y ?? 14}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${clk.x ?? 50}" oninput="外设件改('clock','x',this.value,this)"><output>${clk.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${clk.size ?? 100}" oninput="外设件改('clock','size',this.value,this)"><output>${clk.size ?? 100}%</output></label>
+          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${clk.y ?? 14}" oninput="外设件改('clock','y',this.value,this)"><output>${clk.y ?? 14}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${clk.x ?? 50}" oninput="外设件改('clock','x',this.value,this)"><output>${clk.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${clk.size ?? 100}" oninput="外设件改('clock','size',this.value,this)"><output>${clk.size ?? 100}%</output></label>
         </div>
       </div>
     </div>`,
@@ -1029,9 +1031,9 @@ async function 设置_主题() {
           <input type="text" class="外设输入框" value="${转义(grt.custom || '')}" maxlength="40" oninput="外设件改('greeting','custom',this.value)" placeholder="自定义问候语（留空使用默认）">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${grt.y ?? 21}" oninput="外设件改('greeting','y',this.value,this)"><output>${grt.y ?? 21}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${grt.x ?? 50}" oninput="外设件改('greeting','x',this.value,this)"><output>${grt.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${grt.size ?? 100}" oninput="外设件改('greeting','size',this.value,this)"><output>${grt.size ?? 100}%</output></label>
+          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${grt.y ?? 21}" oninput="外设件改('greeting','y',this.value,this)"><output>${grt.y ?? 21}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${grt.x ?? 50}" oninput="外设件改('greeting','x',this.value,this)"><output>${grt.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${grt.size ?? 100}" oninput="外设件改('greeting','size',this.value,this)"><output>${grt.size ?? 100}%</output></label>
         </div>
       </div>
     </div>`,
@@ -1050,9 +1052,9 @@ async function 设置_主题() {
           <input type="color" class="外设取色" value="${lun.color || '#ffffff'}" oninput="外设件改('lunar','color',this.value)" title="农历颜色">
         </div>
         <div class="外设文格">
-          <label class="外设文项"><span>上下</span><input type="range" min="4" max="92" value="${lun.y ?? 26}" oninput="外设件改('lunar','y',this.value,this)"><output>${lun.y ?? 26}%</output></label>
-          <label class="外设文项"><span>左右</span><input type="range" min="5" max="95" value="${lun.x ?? 50}" oninput="外设件改('lunar','x',this.value,this)"><output>${lun.x ?? 50}%</output></label>
-          <label class="外设文项"><span>大小</span><input type="range" min="50" max="200" value="${lun.size ?? 100}" oninput="外设件改('lunar','size',this.value,this)"><output>${lun.size ?? 100}%</output></label>
+          <label class="外设文项"><span>上下</span><input type="range" min="0" max="100" step="1" value="${lun.y ?? 26}" oninput="外设件改('lunar','y',this.value,this)"><output>${lun.y ?? 26}%</output></label>
+          <label class="外设文项"><span>左右</span><input type="range" min="0" max="100" step="1" value="${lun.x ?? 50}" oninput="外设件改('lunar','x',this.value,this)"><output>${lun.x ?? 50}%</output></label>
+          <label class="外设文项"><span>大小</span><input type="range" min="20" max="300" step="1" value="${lun.size ?? 100}" oninput="外设件改('lunar','size',this.value,this)"><output>${lun.size ?? 100}%</output></label>
         </div>
       </div>
     </div>`,
