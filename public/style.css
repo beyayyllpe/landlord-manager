@@ -2630,3 +2630,357 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   .日志键表 { grid-template-columns: 70px 1fr; }
   .日志分页 { justify-content: center; }
 }
+
+/* ============ 全局外观变量与开关 ============ */
+:root {
+  --accent: #18181b;
+  --accent-fg: #ffffff;
+  --app-radius: 14px;
+}
+[data-theme="dark"] {
+  --accent: #e5e5e5;
+  --accent-fg: #141414;
+}
+body[data-card="glass"] .卡片 {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+body[data-card="outline"] .卡片 {
+  background: transparent;
+  box-shadow: none;
+  border-color: var(--border);
+}
+body[data-density="compact"] .卡片 { padding: 14px 16px; }
+body[data-density="loose"] .卡片 { padding: 24px 26px; }
+body.still *, body.still *::before, body.still *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ============ 外观与登录页自定义（v3 双栏预览） ============ */
+.外设页 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.外设顶栏 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.外设顶栏标题 h2 { margin: 0 0 2px; font-size: 18px; }
+.外设顶栏标题 p { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.外设顶栏操作 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.外设状态 { font-size: 12px; color: var(--ink-2); margin-right: 4px; }
+.外设状态.脏 { color: var(--warn-text); font-weight: 600; }
+
+.外设双栏 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 20px;
+  align-items: start;
+}
+.外设左列 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.外设卡 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--app-radius, 14px);
+  padding: 18px 20px;
+  box-shadow: var(--阴影);
+}
+.外设卡头 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.外设卡头 h3 { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.外设卡头 small { font-size: 12px; color: var(--ink-2); }
+
+.外设行 {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+}
+.外设行 + .外设行 { border-top: 1px dashed var(--border); }
+.外设行.顶对齐 { align-items: start; }
+.外设标签 { font-size: 13px; color: var(--ink); font-weight: 500; line-height: 1.4; }
+.外设标签 small { display: block; font-size: 11.5px; color: var(--ink-2); font-weight: 400; margin-top: 2px; }
+.外设控件 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+
+.外设分段 {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+.外设分段钮 {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.外设分段钮.选中 {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+
+.外设色板 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.外设色点 {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; padding: 0; transition: transform .12s, box-shadow .12s;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+}
+.外设色点:hover { transform: scale(1.08); }
+.外设色点.选中 { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.外设取色 { width: 28px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; }
+
+.外设滑块组 { display: flex; align-items: center; gap: 10px; width: 100%; }
+.外设滑块组 input[type="range"] { flex: 1; accent-color: var(--accent, var(--ink)); cursor: pointer; }
+.外设滑块值 { min-width: 48px; text-align: right; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.外设开关 {
+  position: relative;
+  display: inline-block;
+  width: 40px; height: 22px;
+  flex-shrink: 0;
+}
+.外设开关 input { opacity: 0; width: 0; height: 0; }
+.外设开关轨 {
+  position: absolute; inset: 0;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .18s;
+}
+.外设开关轨::after {
+  content: "";
+  position: absolute; left: 2px; top: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.22);
+  transition: transform .18s;
+}
+.外设开关 input:checked + .外设开关轨 { background: var(--accent, var(--ink)); border-color: var(--accent, var(--ink)); }
+.外设开关 input:checked + .外设开关轨::after { transform: translateX(18px); }
+
+.外设磁贴列 { display: flex; gap: 12px; flex-wrap: wrap; width: 100%; }
+.外设磁贴 {
+  flex: 1 1 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.外设磁贴框 {
+  position: relative;
+  width: 100%;
+  height: 92px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #14161a;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.外设磁贴框.竖 { height: 112px; }
+.外设磁贴框.Logo框 { background: repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%) 50% / 14px 14px; }
+.外设磁贴框 img, .外设磁贴框 video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.外设磁贴框.Logo框 img { object-fit: contain; padding: 8px; }
+.外设磁贴空 { font-size: 11.5px; color: rgba(255,255,255,.65); text-align: center; padding: 0 8px; }
+.外设磁贴框.Logo框 .外设磁贴空 { color: #555; }
+.外设磁贴脚 { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.外设磁贴名 { font-size: 12px; font-weight: 600; color: var(--ink); }
+.外设磁贴钮组 { display: flex; gap: 5px; }
+.外设小钮 {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.外设小钮:hover { background: var(--surface-subtle); }
+.外设小钮.危 { color: var(--danger-text); }
+
+.外设输入框 {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* 右侧实时预览舞台 */
+.外设预览区 {
+  position: sticky;
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.外设预览卡 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--app-radius, 14px);
+  padding: 14px;
+  box-shadow: var(--阴影);
+}
+.外设预览顶 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.外设预览顶 span { font-size: 13px; font-weight: 600; color: var(--ink); }
+.外设预览舞台 {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #14161a;
+  border: 1px solid var(--border);
+  aspect-ratio: 9 / 15.5;
+  max-height: 540px;
+  margin: 0 auto;
+  transition: aspect-ratio .22s ease;
+}
+.外设预览舞台.电脑 { aspect-ratio: 16 / 10; max-height: 290px; }
+.外设预览底图, .外设预览底模糊 {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.外设预览底模糊 { filter: blur(18px) brightness(.72); transform: scale(1.1); display: none; }
+.外设预览舞台.完整图 .外设预览底模糊 { display: block; }
+.外设预览舞台.完整图 .外设预览底图 { object-fit: contain; }
+.外设预览遮罩 {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, .35);
+}
+.外设预览标题区 {
+  position: absolute; left: 8%; right: 8%;
+  transform: translateY(-50%);
+  text-align: center;
+  pointer-events: none;
+  display: flex; flex-direction: column; align-items: center;
+}
+.外设预览Logo {
+  max-width: 72%;
+  max-height: 54px;
+  object-fit: contain;
+  display: block;
+}
+.外设预览双线 {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 82%; margin-top: 6px;
+}
+.外设预览双线 i { flex: 1; height: 1px; background: currentColor; opacity: .45; }
+.外设预览双线 em {
+  font-style: normal; font-size: 9px; letter-spacing: .24em;
+  text-transform: uppercase; opacity: .9; white-space: nowrap;
+}
+.外设预览表单 {
+  position: absolute; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 78%; max-width: 240px;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  display: flex; flex-direction: column; gap: 7px;
+  transition: background .18s, border-color .18s;
+}
+.外设预览舞台.电脑 .外设预览表单 { width: 52%; max-width: 196px; padding: 10px; gap: 6px; }
+.外设预览表单.样式-glass {
+  background: rgba(18, 20, 24, .26);
+  border: 1px solid rgba(255, 255, 255, .32);
+}
+.外设预览表单.样式-solid {
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid rgba(0, 0, 0, .08);
+  color: #1f2329;
+}
+.外设预览表单.样式-outline {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .52);
+}
+.外设预览假框 {
+  height: 24px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .32);
+  background: rgba(255, 255, 255, .08);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; opacity: .82;
+}
+.外设预览表单.样式-solid .外设预览假框 {
+  border-color: rgba(0,0,0,.12);
+  background: rgba(0,0,0,.04);
+  color: #444;
+}
+.外设预览假钮 {
+  height: 24px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; letter-spacing: .28em;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .42);
+}
+.外设预览表单.样式-solid .外设预览假钮 {
+  background: var(--preview-accent, #18181b);
+  color: #fff;
+  border-color: transparent;
+}
+.外设预览备案 {
+  position: absolute; left: 0; right: 0; bottom: 8px;
+  text-align: center; font-size: 8.5px; opacity: .7;
+  pointer-events: none;
+}
+.外设预览提示 {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 1080px) {
+  .外设双栏 { grid-template-columns: 1fr; }
+  .外设预览区 { position: static; }
+}
+@media (max-width: 600px) {
+  .外设行 { grid-template-columns: 1fr; gap: 6px; }
+}

@@ -99,7 +99,7 @@ async function main() {
       assert.strictEqual(cssRes.status, 200);
       const siteRes = await req('GET', '/api/site-info', undefined, false);
       assert.strictEqual(siteRes.status, 200);
-      assert.deepStrictEqual(Object.keys(siteRes.json).sort(), ['ICP备案', 'turnstileSiteKey', '公安备案']);
+      assert.deepStrictEqual(Object.keys(siteRes.json).sort(), ['ICP备案', 'turnstileSiteKey', '公安备案', '外观']);
     });
 
     await test('2. 登录校验：错误密码返回 401，正确密码返回 200 且签发 HttpOnly Cookie', async () => {

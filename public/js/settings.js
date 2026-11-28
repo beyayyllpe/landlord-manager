@@ -247,27 +247,418 @@ function 背景槽HTML(标题, 说明, target, hasBg, kind) {
       </div>
     </div>`;
 }
-async function 设置_主题() {
-  const meta = await fetch('/api/login-bg/meta').then(r => r.json()).catch(() => ({ hasBg: false, mobileHasBg: false, logoHasBg: false }));
+const 外设强调色列表 = ['#18181b', '#2563eb', '#0d9488', '#d97706', '#e11d48'];
+let 外设草稿 = null;
+let 外设快照 = null;
+let 外设预览设备 = 'phone';
+let 外设meta = { hasBg: false, mobileHasBg: false, logoHasBg: false, kind: 'image', mobileKind: 'image' };
+let 外设图版本 = Date.now();
+
+function 默认外观配置() {
+  return {
+    theme: 主题 || '跟随系统',
+    accent: '#18181b',
+    radius: 'medium',
+    card: 'solid',
+    density: 'normal',
+    reduceMotion: false,
+    bgFit: 'fill',
+    overlay: 35,
+    blur: 10,
+    autoContrast: true,
+    logoSize: 100,
+    titleY: 28,
+    formY: 62,
+    formStyle: 'glass',
+    textTone: 'auto',
+    subtitle: 'Rental Keeper',
+    showSub: true,
+    showFoot: true
+  };
+}
+
+function 读外观配置() {
+  const saved = (typeof 全局 !== 'undefined' && 全局 && 全局.settings && 全局.settings.外观 && typeof 全局.settings.外观 === 'object')
+    ? 全局.settings.外观 : {};
+  return Object.assign(默认外观配置(), saved);
+}
+
+function 应用全局外观(cfg) {
+  const c = Object.assign(默认外观配置(), cfg || 读外观配置());
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  if (root && root.style && typeof root.style.setProperty === 'function') {
+    if (c.accent) root.style.setProperty('--accent', c.accent);
+    const radMap = { sharp: '6px', medium: '14px', round: '20px' };
+    root.style.setProperty('--app-radius', radMap[c.radius] || '14px');
+  }
+  if (typeof document !== 'undefined' && document.body) {
+    if (document.body.dataset) {
+      document.body.dataset.card = c.card || 'solid';
+      document.body.dataset.density = c.density || 'normal';
+    }
+    if (document.body.classList) document.body.classList.toggle('still', Boolean(c.reduceMotion));
+  }
+}
+
+function 外设是否未保存() {
+  if (!外设草稿 || !外设快照) return false;
+  return JSON.stringify(外设草稿) !== JSON.stringify(外设快照);
+}
+
+function 更新外设状态条() {
+  const el = document.getElementById('外设状态条');
+  if (!el) return;
+  const 脏 = 外设是否未保存();
+  el.textContent = 脏 ? '有未保存的更改' : '已同步';
+  el.classList.toggle('脏', 脏);
+}
+
+function 更新外设预览() {
+  const stage = document.getElementById('外设预览舞台');
+  if (!stage || !外设草稿) return;
+  const c = 外设草稿;
+  const 是电脑 = 外设预览设备 === 'desktop';
+  stage.className = '外设预览舞台' + (是电脑 ? ' 电脑' : '') + (c.bgFit === 'fit' ? ' 完整图' : '');
+  stage.style.setProperty('--preview-accent', c.accent || '#18181b');
+
+  const 有底图 = 是电脑 ? 外设meta.hasBg : (外设meta.mobileHasBg || 外设meta.hasBg);
+  const 底图地址 = 有底图
+    ? `/api/login-bg?${(!是电脑 && 外设meta.mobileHasBg) ? 'target=mobile&' : ''}t=${外设图版本}`
+    : '';
+  const imgMain = document.getElementById('外设预览底图');
+  const imgBlur = document.getElementById('外设预览底模糊');
+  if (imgMain && imgBlur) {
+    if (底图地址) {
+      if (imgMain.getAttribute('src') !== 底图地址) imgMain.src = 底图地址;
+      if (imgBlur.getAttribute('src') !== 底图地址) imgBlur.src = 底图地址;
+      imgMain.style.display = 'block';
+    } else {
+      imgMain.style.display = 'none';
+      imgBlur.style.display = 'none';
+    }
+  }
+
+  const mask = document.getElementById('外设预览遮罩');
+  if (mask) mask.style.background = `rgba(10, 12, 14, ${(Number(c.overlay) || 0) / 100})`;
+
+  const toneColor = c.textTone === 'dark' ? '#1f2329' : '#ffffff';
+  const titleBox = document.getElementById('外设预览标题区');
+  if (titleBox) {
+    titleBox.style.top = `${c.titleY}%`;
+    titleBox.style.color = toneColor;
+  }
+  const logoImg = document.getElementById('外设预览Logo');
+  if (logoImg) {
+    const scale = (Number(c.logoSize) || 100) / 100;
+    logoImg.style.transform = `scale(${scale})`;
+    logoImg.style.transformOrigin = 'center center';
+  }
+  const subBox = document.getElementById('外设预览双线');
+  const subTxt = document.getElementById('外设预览双线字');
+  if (subBox) subBox.style.display = c.showSub ? 'flex' : 'none';
+  if (subTxt) subTxt.textContent = (c.subtitle || 'Rental Keeper').trim() || 'Rental Keeper';
+
+  const formBox = document.getElementById('外设预览表单');
+  if (formBox) {
+    formBox.style.top = `${c.formY}%`;
+    formBox.className = `外设预览表单 样式-${c.formStyle || 'glass'}`;
+    formBox.style.backdropFilter = `blur(${Number(c.blur) || 0}px)`;
+    formBox.style.webkitBackdropFilter = `blur(${Number(c.blur) || 0}px)`;
+    if (c.formStyle !== 'solid') formBox.style.color = toneColor;
+    else formBox.style.color = '#1f2329';
+  }
+
+  const foot = document.getElementById('外设预览备案');
+  if (foot) {
+    foot.style.display = c.showFoot ? 'block' : 'none';
+    foot.style.color = toneColor;
+  }
+  const tip = document.getElementById('外设预览尺寸提示');
+  if (tip) tip.textContent = 是电脑 ? '16:10 桌面视图' : '9:16 手机视图';
+  更新外设状态条();
+}
+
+function 外设选(键, 值) {
+  if (!外设草稿) return;
+  外设草稿[键] = 值;
+  if (键 === 'theme') 切换主题(值);
+  if (['accent', 'radius', 'card', 'density'].includes(键)) 应用全局外观(外设草稿);
+  渲染设置页();
+}
+
+function 外设滑(键, 值) {
+  if (!外设草稿) return;
+  外设草稿[键] = Number(值);
+  const lab = document.getElementById(`外设值_${键}`);
+  if (lab) lab.textContent = 键 === 'blur' ? `${值}px` : `${值}%`;
+  更新外设预览();
+}
+
+function 外设开(键, checked) {
+  if (!外设草稿) return;
+  外设草稿[键] = Boolean(checked);
+  if (键 === 'reduceMotion') 应用全局外观(外设草稿);
+  更新外设预览();
+}
+
+function 外设字(键, 值) {
+  if (!外设草稿) return;
+  外设草稿[键] = String(值 || '');
+  更新外设预览();
+}
+
+function 外设切预览(设备) {
+  外设预览设备 = 设备 === 'desktop' ? 'desktop' : 'phone';
+  渲染设置页();
+}
+
+function 外设撤销() {
+  if (!外设快照) return;
+  外设草稿 = Object.assign({}, 外设快照);
+  if (外设草稿.theme && 外设草稿.theme !== 主题) 切换主题(外设草稿.theme);
+  应用全局外观(外设草稿);
+  渲染设置页();
+  提示('已撤销未保存的更改');
+}
+
+function 外设恢复默认() {
+  外设草稿 = 默认外观配置();
+  应用全局外观(外设草稿);
+  渲染设置页();
+  提示('已恢复默认外观预览，请点击“保存设置”生效');
+}
+
+async function 外设保存() {
+  if (!外设草稿) return;
+  const 新设置 = await api('/api/settings', 'POST', { 外观: 外设草稿 });
+  if (typeof 全局 === 'object' && 全局) 全局.settings = 新设置;
+  if (外设草稿.theme && 外设草稿.theme !== 主题) 切换主题(外设草稿.theme);
+  应用全局外观(外设草稿);
+  外设快照 = Object.assign({}, 外设草稿);
+  更新外设状态条();
+  提示('外观与登录页设置已保存');
+}
+
+function 外设磁贴HTML(标题, target, has, kind, cls) {
+  const url = `/api/login-bg?target=${target}&t=${外设图版本}`;
+  const 预览内容 = !has
+    ? `<span class="外设磁贴空">未上传，点击上传</span>`
+    : (kind === 'video'
+      ? `<video src="${url}" muted loop autoplay playsinline></video>`
+      : `<img src="${url}" alt="${标题}">`);
   return `
-    <div class="卡片">
-      <h2>主题模式</h2>
-      <div class="工具栏">
-        <button class="btn ${主题==='明亮'?'':'次'}" onclick="切换主题('明亮')">明亮</button>
-        <button class="btn ${主题==='暗黑'?'':'次'}" onclick="切换主题('暗黑')">暗黑</button>
-        <button class="btn ${主题==='跟随系统'?'':'次'}" onclick="切换主题('跟随系统')">跟随系统</button>
+    <div class="外设磁贴">
+      <div class="外设磁贴框 ${cls || ''}" onclick="${has ? `放大预览登录背景('${target}','${kind || 'image'}')` : `document.getElementById('外设传_${target}').click()`}">
+        ${预览内容}
       </div>
-      <p style="color:var(--次文字);font-size:13px">主题选择存在本浏览器，手机和电脑各自记忆、互不影响。${主题==='跟随系统' ? `当前自动跟随系统（${系统暗黑中() ? '暗黑' : '明亮'}）。` : ''}</p>
-    </div>
-    <div class="卡片">
-      <h2>登录页自定义背景与标题图</h2>
-      <p style="color:var(--次文字);font-size:13px;margin-bottom:14px">支持 JPG / PNG / WebP 静态图、GIF 动态图或 MP4 / WebM 短视频（最大 20MB）。手机端可单独传 9:16 竖屏图；也可在下方自定义登录页居中标题图（推荐透明背景 PNG）。</p>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
-        ${背景槽HTML('电脑端背景（推荐 16:9 横屏）', '当前未上传电脑端背景，使用默认渐变。', 'desktop', Boolean(meta && meta.hasBg), meta && meta.kind)}
-        ${背景槽HTML('手机端背景（推荐 9:16 竖屏）', '未单独上传，手机访问时自动沿用电脑背景（完整缩放+模糊铺底）。', 'mobile', Boolean(meta && meta.mobileHasBg), meta && meta.mobileKind)}
-        ${背景槽HTML('登录页标题图 / Logo（可选）', '未上传，默认使用内置金色「租房管家」书法字标题图。', 'logo', Boolean(meta && meta.logoHasBg), 'image')}
+      <div class="外设磁贴脚">
+        <span class="外设磁贴名">${标题}</span>
+        <div class="外设磁贴钮组">
+          <input type="file" id="外设传_${target}" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" style="display:none" onchange="上传登录背景(this,'${target}')">
+          <button type="button" class="外设小钮" onclick="document.getElementById('外设传_${target}').click()">${has ? '更换' : '上传'}</button>
+          ${has ? `<button type="button" class="外设小钮 危" onclick="恢复默认登录背景('${target}')">清除</button>` : ''}
+        </div>
       </div>
     </div>`;
+}
+
+function 外设分段HTML(键, 选项列表, 当前值) {
+  return `<div class="外设分段">${选项列表.map(([v, t]) =>
+    `<button type="button" class="外设分段钮 ${当前值 === v ? '选中' : ''}" onclick="外设选('${键}','${v}')">${t}</button>`
+  ).join('')}</div>`;
+}
+
+async function 设置_主题() {
+  外设meta = await fetch('/api/login-bg/meta').then(r => r.json()).catch(() => ({ hasBg: false, mobileHasBg: false, logoHasBg: false, kind: 'image', mobileKind: 'image' }));
+  外设图版本 = Date.now();
+  if (!外设快照) {
+    外设快照 = 读外观配置();
+    外设草稿 = Object.assign({}, 外设快照);
+  }
+  const c = 外设草稿;
+  const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
+
+  setTimeout(更新外设预览, 0);
+
+  return `
+  <div class="外设页">
+    <div class="外设顶栏">
+      <div class="外设顶栏标题">
+        <h2>外观与登录页</h2>
+        <p>全局界面风格与登录页视觉排版，右侧实时预览效果</p>
+      </div>
+      <div class="外设顶栏操作">
+        <span id="外设状态条" class="外设状态">${外设是否未保存() ? '有未保存的更改' : '已同步'}</span>
+        <button type="button" class="btn 次" onclick="外设撤销()">撤销</button>
+        <button type="button" class="btn 次" onclick="外设恢复默认()">恢复默认</button>
+        <button type="button" class="btn" onclick="外设保存()">保存设置</button>
+      </div>
+    </div>
+
+    <div class="外设双栏">
+      <div class="外设左列">
+        <div class="外设卡">
+          <div class="外设卡头"><h3>外观（全局）</h3><small>作用于后台全部页面</small></div>
+          <div class="外设行">
+            <div class="外设标签">主题模式<small>本设备独立记忆</small></div>
+            <div class="外设控件">${外设分段HTML('theme', [['明亮','明亮'],['暗黑','暗黑'],['跟随系统','跟随系统']], c.theme)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">强调色</div>
+            <div class="外设控件">
+              <div class="外设色板">
+                ${外设强调色列表.map(col => `<button type="button" class="外设色点 ${c.accent === col ? '选中' : ''}" style="background:${col}" onclick="外设选('accent','${col}')" title="${col}"></button>`).join('')}
+                <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设选('accent',this.value)" title="自定义颜色">
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">圆角风格</div>
+            <div class="外设控件">${外设分段HTML('radius', [['sharp','方正'],['medium','适中'],['round','圆润']], c.radius)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">卡片样式</div>
+            <div class="外设控件">${外设分段HTML('card', [['solid','实色'],['glass','玻璃'],['outline','描边']], c.card)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">界面密度</div>
+            <div class="外设控件">${外设分段HTML('density', [['compact','紧凑'],['normal','标准'],['loose','宽松']], c.density)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">减少动效</div>
+            <div class="外设控件">
+              <label class="外设开关"><input type="checkbox" ${c.reduceMotion ? 'checked' : ''} onchange="外设开('reduceMotion',this.checked)"><span class="外设开关轨"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="外设卡">
+          <div class="外设卡头"><h3>登录页背景</h3><small>支持图片 / GIF / 短视频 (≤20MB)</small></div>
+          <div class="外设行 顶对齐">
+            <div class="外设标签">背景图与标题<small>电脑 / 手机独立配置</small></div>
+            <div class="外设控件">
+              <div class="外设磁贴列">
+                ${外设磁贴HTML('16:9 电脑端', 'desktop', Boolean(外设meta.hasBg), 外设meta.kind, '')}
+                ${外设磁贴HTML('9:16 手机端', 'mobile', Boolean(外设meta.mobileHasBg), 外设meta.mobileKind, '竖')}
+                ${外设磁贴HTML('标题图 Logo', 'logo', Boolean(外设meta.logoHasBg), 'image', 'Logo框')}
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">背景填充</div>
+            <div class="外设控件">${外设分段HTML('bgFit', [['fill','铺满裁切'],['fit','完整显示']], c.bgFit)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">遮罩强度</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="0" max="80" value="${c.overlay}" oninput="外设滑('overlay',this.value)">
+                <span class="外设滑块值" id="外设值_overlay">${c.overlay}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">表单模糊</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="0" max="16" value="${c.blur}" oninput="外设滑('blur',this.value)">
+                <span class="外设滑块值" id="外设值_blur">${c.blur}px</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">自动对比度<small>依据背景明暗微调</small></div>
+            <div class="外设控件">
+              <label class="外设开关"><input type="checkbox" ${c.autoContrast ? 'checked' : ''} onchange="外设开('autoContrast',this.checked)"><span class="外设开关轨"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="外设卡">
+          <div class="外设卡头"><h3>标题与表单</h3><small>微调登录页排版位置与风格</small></div>
+          <div class="外设行">
+            <div class="外设标签">标题大小</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="60" max="140" value="${c.logoSize}" oninput="外设滑('logoSize',this.value)">
+                <span class="外设滑块值" id="外设值_logoSize">${c.logoSize}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">标题位置</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="4" max="40" value="${c.titleY}" oninput="外设滑('titleY',this.value)">
+                <span class="外设滑块值" id="外设值_titleY">${c.titleY}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">表单位置</div>
+            <div class="外设控件">
+              <div class="外设滑块组">
+                <input type="range" min="40" max="86" value="${c.formY}" oninput="外设滑('formY',this.value)">
+                <span class="外设滑块值" id="外设值_formY">${c.formY}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">表单样式</div>
+            <div class="外设控件">${外设分段HTML('formStyle', [['glass','透明玻璃'],['solid','实色卡片'],['outline','极简描边']], c.formStyle)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">文字颜色</div>
+            <div class="外设控件">${外设分段HTML('textTone', [['auto','自动'],['light','浅色'],['dark','深色']], c.textTone)}</div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">英文副标题</div>
+            <div class="外设控件" style="flex-wrap:nowrap">
+              <label class="外设开关"><input type="checkbox" ${c.showSub ? 'checked' : ''} onchange="外设开('showSub',this.checked)"><span class="外设开关轨"></span></label>
+              <input type="text" class="外设输入框" value="${转义(c.subtitle || 'Rental Keeper')}" maxlength="40" oninput="外设字('subtitle',this.value)" placeholder="Rental Keeper">
+            </div>
+          </div>
+          <div class="外设行">
+            <div class="外设标签">底部备案信息</div>
+            <div class="外设控件">
+              <label class="外设开关"><input type="checkbox" ${c.showFoot ? 'checked' : ''} onchange="外设开('showFoot',this.checked)"><span class="外设开关轨"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="外设预览区">
+        <div class="外设预览卡">
+          <div class="外设预览顶">
+            <span>实时预览</span>
+            <div class="外设分段">
+              <button type="button" class="外设分段钮 ${外设预览设备 === 'phone' ? '选中' : ''}" onclick="外设切预览('phone')">手机</button>
+              <button type="button" class="外设分段钮 ${外设预览设备 === 'desktop' ? '选中' : ''}" onclick="外设切预览('desktop')">电脑</button>
+            </div>
+          </div>
+          <div class="外设预览舞台" id="外设预览舞台">
+            <img class="外设预览底模糊" id="外设预览底模糊" alt="">
+            <img class="外设预览底图" id="外设预览底图" alt="">
+            <div class="外设预览遮罩" id="外设预览遮罩"></div>
+            <div class="外设预览标题区" id="外设预览标题区">
+              <img class="外设预览Logo" id="外设预览Logo" src="${logoSrc}" alt="标题图">
+              <div class="外设预览双线" id="外设预览双线"><i></i><em id="外设预览双线字">${转义(c.subtitle || 'Rental Keeper')}</em><i></i></div>
+            </div>
+            <div class="外设预览表单 样式-${c.formStyle || 'glass'}" id="外设预览表单">
+              <div class="外设预览假框">账号 / Account</div>
+              <div class="外设预览假框">密码 / Password</div>
+              <div class="外设预览假钮">登 录</div>
+            </div>
+            <div class="外设预览备案" id="外设预览备案">备案号示例 · 租房管家</div>
+          </div>
+          <div class="外设预览提示">
+            <span id="外设预览尺寸提示">${外设预览设备 === 'desktop' ? '16:10 桌面视图' : '9:16 手机视图'}</span>
+            <span>保存后即刻同步登录页</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 window.放大预览登录背景 = function(kind, target = 'desktop') {
   const qs = target === 'desktop' ? '' : `target=${target}&`;

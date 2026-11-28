@@ -441,7 +441,8 @@ app.get('/api/site-info', (req, res) => {
     res.json({
       ICP备案: String(s.ICP备案 || '').trim(),
       公安备案: String(s.公安备案 || '').trim(),
-      turnstileSiteKey: (tsCfg.siteKey && tsCfg.secretKey) ? tsCfg.siteKey : ''
+      turnstileSiteKey: (tsCfg.siteKey && tsCfg.secretKey) ? tsCfg.siteKey : '',
+      外观: (s.外观 && typeof s.外观 === 'object') ? s.外观 : null
     });
   } catch (e) {
     res.json({ ICP备案: '', 公安备案: '', turnstileSiteKey: '' });
@@ -1086,6 +1087,18 @@ app.post('/api/settings', (req, res) => {
   if ('TurnstileSecretKey' in 补丁) {
     if (补丁.TurnstileSecretKey === undefined) delete 补丁.TurnstileSecretKey;
     else 补丁.TurnstileSecretKey = String(补丁.TurnstileSecretKey || '').trim();
+  }
+  if ('外观' in 补丁) {
+    if (补丁.外观 && typeof 补丁.外观 === 'object' && !Array.isArray(补丁.外观)) {
+      const 允许 = ['theme','accent','radius','card','density','reduceMotion','bgFit','overlay','blur','autoContrast','logoSize','titleY','formY','formStyle','textTone','subtitle','showSub','showFoot'];
+      const 净 = {};
+      for (const k of 允许) {
+        if (k in 补丁.外观) 净[k] = 补丁.外观[k];
+      }
+      补丁.外观 = 净;
+    } else {
+      delete 补丁.外观;
+    }
   }
   const 变更项 = Object.keys(补丁).map(k => k === 'TurnstileSecretKey' ? 'TurnstileSecretKey(已更新)' : k);
   Object.assign(data.settings, 补丁);

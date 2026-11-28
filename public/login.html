@@ -179,8 +179,8 @@
       padding: 0 20px;
       border-radius: 23px;
       background: rgba(18, 20, 24, 0.24);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(var(--login-blur, 10px));
+      -webkit-backdrop-filter: blur(var(--login-blur, 10px));
       border: 1px solid rgba(255, 255, 255, 0.34);
       color: #FFFFFF;
       font-size: 15px;
@@ -205,8 +205,8 @@
       margin-top: 4px;
       border-radius: 23px;
       background: rgba(255, 255, 255, 0.14);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(var(--login-blur, 10px));
+      -webkit-backdrop-filter: blur(var(--login-blur, 10px));
       border: 1px solid rgba(255, 255, 255, 0.42);
       color: #FFFFFF;
       font-size: 15px;
@@ -228,6 +228,43 @@
       -webkit-backdrop-filter: blur(12px);
       border-color: rgba(240, 144, 125, 0.45);
       color: #FFF0ED;
+    }
+    .背景层.完整显示 .背景主层 { object-fit: contain; }
+    body.有背景.表单实色 .登录卡 {
+      max-width: min(360px, 90vw);
+      padding: 24px 22px 22px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #1f2329;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+    }
+    body.有背景.表单实色 .输入盒 input {
+      background: rgba(0, 0, 0, 0.04);
+      border-color: rgba(0, 0, 0, 0.14);
+      color: #1f2329;
+      text-shadow: none;
+    }
+    body.有背景.表单实色 .输入盒 input::placeholder { color: rgba(31, 35, 41, 0.55); }
+    body.有背景.表单实色 .登录钮 {
+      background: var(--accent, #18181b);
+      color: #ffffff;
+      border-color: transparent;
+      text-shadow: none;
+    }
+    body.有背景.表单描边 .输入盒 input,
+    body.有背景.表单描边 .登录钮 {
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border-color: rgba(255, 255, 255, 0.56);
+    }
+    body.有背景.文字深色 .双线头部,
+    body.有背景.文字深色 .双线英,
+    body.有背景.文字深色 .双线副,
+    body.有背景.文字深色 .备案底栏 {
+      color: #1f2329;
+      text-shadow: none;
+    }
       border-radius: 12px;
       text-align: center;
     }
@@ -501,6 +538,41 @@
       try {
         const info = await fetch('/api/site-info').then(r => r.json());
         if (info && info.turnstileSiteKey) 挂载Turnstile(info.turnstileSiteKey);
+        if (info && info.外观 && typeof info.外观 === 'object') {
+          const wg = info.外观;
+          if (wg.accent) document.documentElement.style.setProperty('--accent', wg.accent);
+          if (typeof wg.blur === 'number') {
+            document.documentElement.style.setProperty('--login-blur', wg.blur + 'px');
+          }
+          if (typeof wg.overlay === 'number') {
+            const mask = document.querySelector('.背景遮罩');
+            if (mask) mask.style.background = `rgba(10, 12, 14, ${Math.max(0, Math.min(80, wg.overlay)) / 100})`;
+          }
+          if (wg.bgFit === 'fit') {
+            const bgLayer = document.getElementById('背景层');
+            if (bgLayer) bgLayer.classList.add('完整显示');
+          }
+          if (typeof wg.logoSize === 'number') {
+            const logo = document.getElementById('登录标题图');
+            if (logo) logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
+          }
+          if (wg.showSub === false) {
+            const sub1 = document.querySelector('.双线英');
+            const sub2 = document.querySelector('.双线副');
+            if (sub1) sub1.style.display = 'none';
+            if (sub2) sub2.style.display = 'none';
+          } else if (wg.subtitle) {
+            const subSpan = document.querySelector('.双线英 span');
+            if (subSpan) subSpan.textContent = String(wg.subtitle).trim();
+          }
+          if (wg.formStyle === 'solid') document.body.classList.add('表单实色');
+          else if (wg.formStyle === 'outline') document.body.classList.add('表单描边');
+          if (wg.textTone === 'dark') document.body.classList.add('文字深色');
+          if (wg.showFoot === false) {
+            const f = document.getElementById('备案底栏');
+            if (f) f.style.display = 'none';
+          }
+        }
         const icp = (info && info.ICP备案 || '').trim();
         const ga = (info && info.公安备案 || '').trim();
         if (!icp && !ga) return;
