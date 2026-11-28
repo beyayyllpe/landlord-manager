@@ -2875,7 +2875,7 @@ tr.空白日 td:first-child { font-variant-numeric: tabular-nums; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  max-width: 82%;
+  max-width: none;
 }
 .Logo着色层 {
   display: inline-flex;

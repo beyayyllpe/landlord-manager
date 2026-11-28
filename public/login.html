@@ -562,7 +562,10 @@
           }
           if (typeof wg.logoSize === 'number') {
             const logo = document.getElementById('登录标题图');
-            if (logo) logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
+            if (logo) {
+              logo.style.height = `calc(clamp(38px, 6.2vw, 66px) * ${wg.logoSize / 100})`;
+              logo.style.maxWidth = '92vw';
+            }
           }
           const logoEl = document.getElementById('登录标题图');
           if (logoEl) {

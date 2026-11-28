@@ -766,7 +766,7 @@ async function 设置_主题() {
             <div class="外设标签">标题大小</div>
             <div class="外设控件">
               <div class="外设滑块组">
-                <input type="range" min="60" max="140" value="${c.logoSize}" oninput="外设滑('logoSize',this.value)">
+                <input type="range" min="40" max="250" value="${c.logoSize}" oninput="外设滑('logoSize',this.value)">
                 <span class="外设滑块值" id="外设值_logoSize">${c.logoSize}%</span>
               </div>
             </div>
