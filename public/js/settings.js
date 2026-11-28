@@ -258,10 +258,6 @@ function 默认外观配置() {
   return {
     theme: 主题 || '跟随系统',
     accent: '#18181b',
-    radius: 'medium',
-    card: 'solid',
-    density: 'normal',
-    reduceMotion: false,
     bgFit: 'fill',
     overlay: 35,
     blur: 10,
@@ -301,15 +297,6 @@ function 应用全局外观(cfg) {
       root.style.setProperty('--accent', c.accent);
       root.style.setProperty('--accent-fg', 计算反白色(c.accent));
     }
-    const radMap = { sharp: '4px', medium: '14px', round: '22px' };
-    root.style.setProperty('--app-radius', radMap[c.radius] || '14px');
-  }
-  if (typeof document !== 'undefined' && document.body) {
-    if (document.body.dataset) {
-      document.body.dataset.card = c.card || 'solid';
-      document.body.dataset.density = c.density || 'normal';
-    }
-    if (document.body.classList) document.body.classList.toggle('still', Boolean(c.reduceMotion));
   }
 }
 
@@ -574,7 +561,11 @@ async function 设置_主题() {
   外设图版本 = Date.now();
   if (!外设快照) {
     外设快照 = 读外观配置();
+    外设快照.theme = 主题;
     外设草稿 = Object.assign({}, 外设快照);
+  } else {
+    外设草稿.theme = 主题;
+    外设快照.theme = 主题;
   }
   const c = 外设草稿;
   const logoSrc = 外设meta.logoHasBg ? `/api/login-bg?target=logo&t=${外设图版本}` : 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><text x="90" y="31" text-anchor="middle" fill="#ffffff" font-size="28" font-family="serif" letter-spacing="4">租房管家</text></svg>');
@@ -611,24 +602,6 @@ async function 设置_主题() {
                 ${外设强调色列表.map(col => `<button type="button" class="外设色点 ${c.accent === col ? '选中' : ''}" style="background:${col}" onclick="外设选('accent','${col}')" title="${col}"></button>`).join('')}
                 <input type="color" class="外设取色" value="${c.accent || '#18181b'}" oninput="外设调色(this.value)" onchange="外设选('accent',this.value)" title="自定义颜色">
               </div>
-            </div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">圆角风格</div>
-            <div class="外设控件">${外设分段HTML('radius', [['sharp','方正'],['medium','适中'],['round','圆润']], c.radius)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">卡片样式</div>
-            <div class="外设控件">${外设分段HTML('card', [['solid','实色'],['glass','玻璃'],['outline','描边']], c.card)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">界面密度</div>
-            <div class="外设控件">${外设分段HTML('density', [['compact','紧凑'],['normal','标准'],['loose','宽松']], c.density)}</div>
-          </div>
-          <div class="外设行">
-            <div class="外设标签">减少动效</div>
-            <div class="外设控件">
-              <label class="外设开关"><input type="checkbox" ${c.reduceMotion ? 'checked' : ''} onchange="外设开('reduceMotion',this.checked)"><span class="外设开关轨"></span></label>
             </div>
           </div>
         </div>
@@ -1451,6 +1424,8 @@ async function 设置_关于() {
 }
 window.切换主题 = function(新主题) {
   主题 = 新主题; localStorage.setItem('主题', 主题); 应用主题();
+  if (typeof 外设草稿 === 'object' && 外设草稿) 外设草稿.theme = 新主题;
+  if (typeof 外设快照 === 'object' && 外设快照) 外设快照.theme = 新主题;
   刷新设置详情();   // 只刷新右侧详情，按钮高亮跟着变
 };
 window.修改密码 = async function() {
