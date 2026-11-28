@@ -695,23 +695,14 @@
                 return new Intl.DateTimeFormat('zh-CN-u-ca-chinese', opt).format(now);
               } catch (e) { return ''; }
             };
-            const 算问候 = h => h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
             const 控件HTML = [];
             const ws = wg.widgets || {};
             if (ws.clock && ws.clock.on) {
               const v = ws.clock;
+              const st = v.style || 'dial';
               const sc = (Number(v.size) || 100) / 100;
               baseCss.push(`.登录控件-clock { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 14)}%; transform:translate(-50%,-50%) scale(${sc}); color:${v.color || '#ffffff'}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
-              const sz = v.style === 'big' ? '56px;font-weight:600' : (v.style === 'mini' ? '20px;font-weight:500;letter-spacing:.14em' : '38px;font-weight:300;letter-spacing:.06em');
-              const showDate = v.style !== 'mini';
-              控件HTML.push(`<div class="登录控件 登录控件-clock"><div id="登录时钟时" style="font-size:${sz};line-height:1.05"></div>${showDate ? '<div id="登录时钟期" style="font-size:12px;opacity:.82;letter-spacing:.16em;margin-top:4px"></div>' : ''}</div>`);
-            }
-            if (ws.greeting && ws.greeting.on) {
-              const v = ws.greeting;
-              const sc = (Number(v.size) || 100) / 100;
-              baseCss.push(`.登录控件-greeting { position:fixed; left:${Number(v.x ?? 50)}%; top:${Number(v.y ?? 21)}%; transform:translate(-50%,-50%) scale(${sc}); color:${v.color || '#ffffff'}; text-align:center; white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,0.55); }`);
-              const txt = String(v.custom || '').trim() || 算问候(now.getHours());
-              控件HTML.push(`<div class="登录控件 登录控件-greeting" style="font-size:15px;font-weight:500;letter-spacing:.18em">${txt}</div>`);
+              控件HTML.push(`<div class="登录控件 登录控件-clock" id="登录时钟容器" data-cstyle="${st}"></div>`);
             }
             if (ws.lunar && ws.lunar.mode && ws.lunar.mode !== 'hide') {
               const v = ws.lunar;
@@ -746,16 +737,34 @@
             });
             wLayer.innerHTML = 控件HTML.join('');
             const 刷时钟 = () => {
+              const box = document.getElementById('登录时钟容器');
+              if (!box) return;
               const cur = new Date();
-              const tEl = document.getElementById('登录时钟时');
-              const dEl = document.getElementById('登录时钟期');
-              if (tEl) tEl.textContent = cur.toTimeString().slice(0, 5);
-              if (dEl) {
-                const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][cur.getDay()];
-                dEl.textContent = `${cur.getMonth() + 1}月${cur.getDate()}日 · ${week}`;
+              const st = box.dataset.cstyle || 'dial';
+              const hh = String(cur.getHours()).padStart(2, '0');
+              const mm = String(cur.getMinutes()).padStart(2, '0');
+              const hm = `${hh}:${mm}`;
+              const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][cur.getDay()];
+              const dateStr = `${cur.getMonth() + 1}月${cur.getDate()}日 · ${week}`;
+              if (st === 'dial') {
+                const hr = (cur.getHours() % 12) * 30 + cur.getMinutes() * 0.5;
+                const mn = cur.getMinutes() * 6 + cur.getSeconds() * 0.1;
+                const sc = cur.getSeconds() * 6;
+                const ticks = Array.from({ length: 12 }, (_, i) => {
+                  const isQ = i % 3 === 0;
+                  return `<line x1="50" y1="${isQ ? 6 : 8}" x2="50" y2="${isQ ? 13 : 11}" stroke="currentColor" stroke-width="${isQ ? 1.8 : 1}" stroke-opacity="${isQ ? .85 : .45}" transform="rotate(${i * 30} 50 50)"/>`;
+                }).join('');
+                box.innerHTML = `<svg width="96" height="96" viewBox="0 0 100 100" style="display:block;overflow:visible"><circle cx="50" cy="50" r="46" fill="rgba(18,20,24,0.26)" stroke="currentColor" stroke-width="1.2" stroke-opacity=".42"/>${ticks}<line x1="50" y1="50" x2="50" y2="26" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" transform="rotate(${hr} 50 50)"/><line x1="50" y1="50" x2="50" y2="17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="rotate(${mn} 50 50)"/><line x1="50" y1="56" x2="50" y2="14" stroke="currentColor" stroke-width="0.9" stroke-opacity=".75" stroke-linecap="round" transform="rotate(${sc} 50 50)"/><circle cx="50" cy="50" r="2.6" fill="currentColor"/></svg>`;
+              } else if (st === 'flip') {
+                const cardS = 'position:relative;width:54px;height:62px;border-radius:10px;background:rgba(18,20,24,0.34);border:1px solid rgba(255,255,255,0.28);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;';
+                box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;justify-content:center"><div style="${cardS}">${hh}</div><span style="opacity:.7;font-size:24px">:</span><div style="${cardS}">${mm}</div></div><div style="font-size:12px;opacity:.82;letter-spacing:.16em;margin-top:8px">${dateStr}</div>`;
+              } else if (st === 'pill') {
+                box.innerHTML = `<div style="padding:7px 18px;border-radius:999px;background:rgba(18,20,24,0.28);border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(10px);display:inline-flex;align-items:center;gap:10px"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.85"></span><span style="font-size:16px;font-weight:500;letter-spacing:.12em">${hm}</span><span style="font-size:11px;opacity:.75;letter-spacing:.1em">${cur.getMonth()+1}/${cur.getDate()} ${week.replace('星期','周')}</span></div>`;
+              } else {
+                box.innerHTML = `<div style="display:flex;align-items:center;gap:14px;text-align:left"><div style="font-size:46px;font-weight:200;letter-spacing:.04em;line-height:1">${hm}</div><div style="border-left:1px solid currentColor;padding-left:12px;font-size:12px;letter-spacing:.18em;line-height:1.5;opacity:.85">${cur.getMonth()+1}月${cur.getDate()}日<br>${week}</div></div>`;
               }
             };
-            if (ws.clock && ws.clock.on) { 刷时钟(); setInterval(刷时钟, 15000); }
+            if (ws.clock && ws.clock.on) { 刷时钟(); setInterval(刷时钟, 1000); }
           }
           if (baseCss.length || cssRules.length) {
             const st = document.createElement('style');

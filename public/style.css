@@ -2817,12 +2817,29 @@ body.still *, body.still *::before, body.still *::after {
   white-space: nowrap;
   text-align: center;
 }
-.外设预览控件.控件-clock .时 { font-size: 38px; font-weight: 300; letter-spacing: .06em; line-height: 1.05; }
+.外设预览控件.控件-clock .时 { font-size: 38px; font-weight: 200; letter-spacing: .06em; line-height: 1.05; }
 .外设预览控件.控件-clock .期 { font-size: 12px; opacity: .82; letter-spacing: .16em; margin-top: 4px; }
-.外设预览控件.控件-clock.样式-big .时 { font-size: 56px; font-weight: 600; letter-spacing: .04em; }
-.外设预览控件.控件-clock.样式-mini .时 { font-size: 20px; font-weight: 500; letter-spacing: .14em; }
-.外设预览控件.控件-clock.样式-mini .期 { display: none; }
-.外设预览控件.控件-greeting { font-size: 15px; font-weight: 500; letter-spacing: .18em; }
+.外设预览控件.控件-clock.样式-flip { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.外设预览控件.控件-clock.样式-flip .翻页盒 { display: flex; align-items: center; gap: 6px; }
+.外设预览控件.控件-clock.样式-flip .翻页卡 {
+  position: relative; width: 54px; height: 62px; border-radius: 10px;
+  background: rgba(18, 20, 24, .34); border: 1px solid rgba(255, 255, 255, .28);
+  backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;
+  font-size: 32px; font-weight: 600; letter-spacing: .02em; font-variant-numeric: tabular-nums;
+}
+.外设预览控件.控件-clock.样式-flip .翻页卡::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, .18);
+}
+.外设预览控件.控件-clock.样式-pill {
+  padding: 7px 18px; border-radius: 999px;
+  background: rgba(18, 20, 24, .28); border: 1px solid rgba(255, 255, 255, .3);
+  backdrop-filter: blur(10px); display: inline-flex; align-items: center; gap: 10px;
+}
+.外设预览控件.控件-clock.样式-pill .时 { font-size: 16px; font-weight: 500; letter-spacing: .12em; }
+.外设预览控件.控件-clock.样式-pill .期 { font-size: 11px; margin-top: 0; opacity: .75; letter-spacing: .1em; }
+.外设预览控件.控件-clock.样式-editorial { display: flex; align-items: center; gap: 14px; text-align: left; }
+.外设预览控件.控件-clock.样式-editorial .时 { font-size: 46px; font-weight: 200; letter-spacing: .04em; line-height: 1; }
+.外设预览控件.控件-clock.样式-editorial .期 { border-left: 1px solid currentColor; padding-left: 12px; margin-top: 0; font-size: 12px; letter-spacing: .18em; line-height: 1.5; }
 .外设预览控件.控件-lunar { font-size: 13px; letter-spacing: .22em; opacity: .88; }
 .外设预览控件.控件-divider { width: 220px; height: 0; border-top: 1px solid currentColor; }
 .外设预览文项 {

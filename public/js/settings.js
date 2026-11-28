@@ -284,8 +284,7 @@ function 默认外观配置() {
     ],
     dividers: [],
     widgets: {
-      clock: { on: false, style: 'digit', color: '#ffffff', y: 14, x: 50, size: 100 },
-      greeting: { on: false, custom: '', color: '#ffffff', y: 21, x: 50, size: 100 },
+      clock: { on: false, style: 'dial', color: '#ffffff', y: 14, x: 50, size: 100 },
       lunar: { mode: 'hide', solarTerm: true, color: '#ffffff', y: 26, x: 50, size: 100 }
     },
     customCss: ''
@@ -466,15 +465,34 @@ function 计算节气(d) {
   return '';
 }
 
+function 生成表盘SVG(d) {
+  const hr = (d.getHours() % 12) * 30 + d.getMinutes() * 0.5;
+  const mn = d.getMinutes() * 6 + d.getSeconds() * 0.1;
+  const sc = d.getSeconds() * 6;
+  const ticks = Array.from({ length: 12 }, (_, i) => {
+    const a = i * 30;
+    const isQ = i % 3 === 0;
+    return `<line x1="50" y1="${isQ ? 6 : 8}" x2="50" y2="${isQ ? 13 : 11}" stroke="currentColor" stroke-width="${isQ ? 1.8 : 1}" stroke-opacity="${isQ ? .85 : .45}" transform="rotate(${a} 50 50)"/>`;
+  }).join('');
+  return `<svg width="92" height="92" viewBox="0 0 100 100" style="display:block;overflow:visible">
+    <circle cx="50" cy="50" r="46" fill="rgba(18,20,24,0.26)" stroke="currentColor" stroke-width="1.2" stroke-opacity=".42"/>
+    ${ticks}
+    <line x1="50" y1="50" x2="50" y2="26" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" transform="rotate(${hr} 50 50)"/>
+    <line x1="50" y1="50" x2="50" y2="17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="rotate(${mn} 50 50)"/>
+    <line x1="50" y1="56" x2="50" y2="14" stroke="currentColor" stroke-width="0.9" stroke-opacity=".75" stroke-linecap="round" transform="rotate(${sc} 50 50)"/>
+    <circle cx="50" cy="50" r="2.6" fill="currentColor"/>
+  </svg>`;
+}
+
   const widgetLayer = document.getElementById('外设预览控件层' + 后缀);
   if (widgetLayer) {
     const ws = (c.widgets && typeof c.widgets === 'object') ? c.widgets : {};
     const now = new Date();
-    const hm = now.toTimeString().slice(0, 5);
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const hm = `${hh}:${mm}`;
     const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][now.getDay()];
     const dateStr = `${now.getMonth() + 1}月${now.getDate()}日 · ${week}`;
-    const h = now.getHours();
-    const defGreet = h < 6 ? '夜深了，注意休息' : (h < 11 ? '早安，祝你今日顺遂' : (h < 14 ? '午安，愿诸事顺心' : (h < 18 ? '下午好' : '晚上好')));
     let lunarStr = '';
     try {
       const opt = (ws.lunar && ws.lunar.mode === 'date') ? { day: 'numeric' } : { month: 'long', day: 'numeric' };
@@ -484,13 +502,17 @@ function 计算节气(d) {
     const htmls = [];
     if (ws.clock && ws.clock.on) {
       const v = ws.clock;
+      const st = v.style || 'dial';
       const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 14)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
-      htmls.push(`<div class="外设预览控件 控件-clock 样式-${v.style || 'digit'} 登录控件 登录控件-clock" style="${sty}"><div class="时">${hm}</div><div class="期">${dateStr}</div></div>`);
-    }
-    if (ws.greeting && ws.greeting.on) {
-      const v = ws.greeting;
-      const sty = `left:${Number(v.x ?? 50)}%;top:${Number(v.y ?? 21)}%;transform:translate(-50%,-50%) scale(${(Number(v.size)||100)/100});color:${v.color || '#ffffff'};text-shadow:0 2px 10px rgba(0,0,0,0.55);`;
-      htmls.push(`<div class="外设预览控件 控件-greeting 登录控件 登录控件-greeting" style="${sty}">${转义((v.custom || '').trim() || defGreet)}</div>`);
+      if (st === 'dial') {
+        htmls.push(`<div class="外设预览控件 控件-clock 样式-dial 登录控件 登录控件-clock" style="${sty}">${生成表盘SVG(now)}</div>`);
+      } else if (st === 'flip') {
+        htmls.push(`<div class="外设预览控件 控件-clock 样式-flip 登录控件 登录控件-clock" style="${sty}"><div class="翻页盒"><div class="翻页卡">${hh}</div><span style="opacity:.7;font-size:24px">:</span><div class="翻页卡">${mm}</div></div><div class="期">${dateStr}</div></div>`);
+      } else if (st === 'pill') {
+        htmls.push(`<div class="外设预览控件 控件-clock 样式-pill 登录控件 登录控件-clock" style="${sty}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.85"></span><span class="时">${hm}</span><span class="期">${now.getMonth() + 1}/${now.getDate()} ${week.replace('星期','周')}</span></div>`);
+      } else {
+        htmls.push(`<div class="外设预览控件 控件-clock 样式-editorial 登录控件 登录控件-clock" style="${sty}"><div class="时">${hm}</div><div class="期">${now.getMonth() + 1}月${now.getDate()}日<br>${week}</div></div>`);
+      }
     }
     if (ws.lunar && ws.lunar.mode && ws.lunar.mode !== 'hide') {
       const v = ws.lunar;
@@ -1028,19 +1050,18 @@ async function 设置_主题() {
   ].join(''));
 
   const ws = c.widgets;
-  const clk = ws.clock || { on: false, style: 'digit', color: '#ffffff', y: 14, x: 50, size: 100 };
-  const grt = ws.greeting || { on: false, custom: '', color: '#ffffff', y: 21, x: 50, size: 100 };
+  const clk = ws.clock || { on: false, style: 'dial', color: '#ffffff', y: 14, x: 50, size: 100 };
   const lun = ws.lunar || { mode: 'hide', solarTerm: true, color: '#ffffff', y: 26, x: 50, size: 100 };
   const 控件面板 = 面板('widget', [
     `<div class="外设文卡" style="margin-top:0;margin-bottom:10px">
       <div class="外设文头" style="justify-content:space-between">
-        <div><b style="font-size:13.5px">实时时钟</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">数字 / 大字 / 极简三选一</small></div>
+        <div><b style="font-size:13.5px">实时时钟</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">圆表盘 / 翻页 / 杂志 / 胶囊</small></div>
         <label class="外设开关"><input type="checkbox" ${clk.on ? 'checked' : ''} onchange="外设件改('clock','on',this.checked)"><span class="外设开关轨"></span></label>
       </div>
       <div id="外设件体_clock" ${clk.on ? '' : 'hidden'} style="padding-top:8px;border-top:1px dashed var(--border)">
         <div class="外设文头" style="margin-bottom:8px;justify-content:space-between">
-          <div class="外设分段">${[['digit','数字'],['big','大字'],['mini','极简']].map(([v, t]) =>
-            `<button type="button" class="外设分段钮 ${(clk.style || 'digit') === v ? '选中' : ''}" onclick="外设件改('clock','style','${v}',this)">${t}</button>`
+          <div class="外设分段">${[['dial','圆形表盘'],['flip','翻页卡片'],['editorial','极细杂志'],['pill','玻璃胶囊']].map(([v, t]) =>
+            `<button type="button" class="外设分段钮 ${(clk.style || 'dial') === v ? '选中' : ''}" onclick="外设件改('clock','style','${v}',this)">${t}</button>`
           ).join('')}</div>
           <input type="color" class="外设取色" value="${clk.color || '#ffffff'}" oninput="外设件改('clock','color',this.value)" title="时钟颜色">
         </div>
@@ -1048,23 +1069,6 @@ async function 设置_主题() {
           ${外设微调HTML('上下', 0, 100, clk.y ?? 14, '%', `外设件改('clock','y',this.value,this)`)}
           ${外设微调HTML('左右', 0, 100, clk.x ?? 50, '%', `外设件改('clock','x',this.value,this)`)}
           ${外设微调HTML('大小', 10, 400, clk.size ?? 100, '%', `外设件改('clock','size',this.value,this)`)}
-        </div>
-      </div>
-    </div>`,
-    `<div class="外设文卡" style="margin-top:0;margin-bottom:10px">
-      <div class="外设文头" style="justify-content:space-between">
-        <div><b style="font-size:13.5px">时段问候</b> <small style="color:var(--ink-2);font-size:12px;margin-left:6px">留空自动显示早/午/晚安</small></div>
-        <label class="外设开关"><input type="checkbox" ${grt.on ? 'checked' : ''} onchange="外设件改('greeting','on',this.checked)"><span class="外设开关轨"></span></label>
-      </div>
-      <div id="外设件体_greeting" ${grt.on ? '' : 'hidden'} style="padding-top:8px;border-top:1px dashed var(--border)">
-        <div class="外设文头" style="margin-bottom:8px">
-          <input type="color" class="外设取色" value="${grt.color || '#ffffff'}" oninput="外设件改('greeting','color',this.value)" title="问候语颜色">
-          <input type="text" class="外设输入框" value="${转义(grt.custom || '')}" maxlength="40" oninput="外设件改('greeting','custom',this.value)" placeholder="自定义问候语（留空使用默认）">
-        </div>
-        <div class="外设文格">
-          ${外设微调HTML('上下', 0, 100, grt.y ?? 21, '%', `外设件改('greeting','y',this.value,this)`)}
-          ${外设微调HTML('左右', 0, 100, grt.x ?? 50, '%', `外设件改('greeting','x',this.value,this)`)}
-          ${外设微调HTML('大小', 10, 400, grt.size ?? 100, '%', `外设件改('greeting','size',this.value,this)`)}
         </div>
       </div>
     </div>`,
