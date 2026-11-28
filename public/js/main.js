@@ -62,12 +62,47 @@ document.getElementById('侧边栏').addEventListener('click', e => {
   });
 });
 
-// 顶栏时钟：北京时间到分。凌晨 0–6 点时额外标出当前营业日（那会儿营业日还是昨天）
+function 获取农历与节日(d) {
+  let 农历 = '';
+  try {
+    const fmt = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).format(d);
+    农历 = fmt;
+  } catch (e) {}
+  const mmdd = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const 公历节 = {
+    '01-01': '元旦', '02-14': '情人节', '03-08': '妇女节', '03-12': '植树节',
+    '05-01': '劳动节', '05-04': '青年节', '06-01': '儿童节', '07-01': '建党节',
+    '08-01': '建军节', '09-10': '教师节', '10-01': '国庆节', '12-25': '圣诞节'
+  };
+  const 农历节 = {
+    '正月初一': '春节', '正月十五': '元宵节', '五月初五': '端午节',
+    '七月初七': '七夕', '八月十五': '中秋节', '九月初九': '重阳节', '腊月初八': '腊八节'
+  };
+  let 节 = 公历节[mmdd] || '';
+  for (const [k, v] of Object.entries(农历节)) {
+    if (农历.includes(k)) { 节 = 节 ? `${节}/${v}` : v; break; }
+  }
+  if (!节 && typeof 计算节气 === 'function') {
+    const jq = 计算节气(d);
+    if (jq) 节 = jq === '清明' ? '清明节' : jq;
+  }
+  // 除夕判断：明天是正月初一
+  try {
+    const 明日 = new Date(d.getTime() + 86400000);
+    const 明农 = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).format(明日);
+    if (明农.includes('正月初一')) 节 = '除夕';
+  } catch (e) {}
+  return { 农历, 节 };
+}
+
+// 顶栏时钟：北京时间到分 + 农历 + 节假日/节气；凌晨 0–6 点时额外标出当前营业日
 function 更新顶栏时间() {
   const el = document.getElementById('月份显示');
   if (!el) return;
   const 业 = 营业日();
-  el.textContent = `${北京日期()} ${北京时分()}` + (业 === 今天() ? '' : `　营业日 ${业.slice(5)}`);
+  const { 农历, 节 } = 获取农历与节日(new Date());
+  const 附加 = [农历 ? `农历${农历}` : '', 节].filter(Boolean).join(' · ');
+  el.textContent = `${北京日期()} ${北京时分()}` + (附加 ? ` · ${附加}` : '') + (业 === 今天() ? '' : `　营业日 ${业.slice(5)}`);
 }
 async function 渲染() {
   const 容器 = document.getElementById('内容');

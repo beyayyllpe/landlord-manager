@@ -1,6 +1,8 @@
 // ============ 设置（左侧目录树 + 右侧详情） ============
 let 设置节点 = '主题';   // 当前选中的目录项，本次会话内保留（刷新页面回到主题模式）
 let 高级设置页签 = '账单与月份';
+let 安全设置页签 = 'pwd';
+let 关于页签 = 'backup';
 let 日志筛选 = '全部';
 let 日志搜索 = '';
 let 日志每页 = 50;
@@ -13,7 +15,7 @@ let ts密钥显隐定时器 = null;
 
 // 设置目录树：加项 / 改顺序只动这张表，各项的详情由对应的 设置_xxx() 返回 HTML
 const 设置目录 = [
-  { 键: '主题', 图标: '🎨', 名: '主题模式', 渲染: 设置_主题 },
+  { 键: '主题', 图标: '🎨', 名: '个性设置', 渲染: 设置_主题 },
   { 键: '安全', 图标: '🔒', 名: '安全设置', 渲染: 设置_安全 },
   { 键: '参数', 图标: '⚙️', 名: '高级设置', 渲染: 设置_参数 },
   { 键: '关于', 图标: 'ℹ️', 名: '关于', 渲染: 设置_关于 }
@@ -1202,6 +1204,18 @@ window.切换密码框显隐 = function(id, btn) {
 function 清理TS密钥定时() {
   if (ts密钥显隐定时器) { clearTimeout(ts密钥显隐定时器); ts密钥显隐定时器 = null; }
 }
+function 切安全页签(键) {
+  安全设置页签 = 键;
+  document.querySelectorAll('[data-安全面板]').forEach(el => { el.hidden = el.dataset.安全面板 !== 键; });
+  document.querySelectorAll('[data-安全页签]').forEach(el => el.classList.toggle('选中', el.dataset.安全页签 === 键));
+}
+
+function 切关于页签(键) {
+  关于页签 = 键;
+  document.querySelectorAll('[data-关于面板]').forEach(el => { el.hidden = el.dataset.关于面板 !== 键; });
+  document.querySelectorAll('[data-关于页签]').forEach(el => el.classList.toggle('选中', el.dataset.关于页签 === 键));
+}
+
 async function 设置_安全() {
   清理TS密钥定时();
   const 账号 = await api('/api/account').catch(() => ({ 用户名: '' }));
@@ -1214,7 +1228,11 @@ async function 设置_安全() {
     ? '已通过服务端环境变量配置（TURNSTILE_SECRET_KEY）'
     : (密钥已配 ? '••••••••••••••••••••••••' : '0x4AAAAAAA...');
   return `
-    <div class="卡片">
+    <nav class="外设页签栏" style="margin-bottom:14px" role="tablist">
+      <button type="button" class="外设页签 ${安全设置页签 === 'pwd' ? '选中' : ''}" data-安全页签="pwd" onclick="切安全页签('pwd')">登录密码</button>
+      <button type="button" class="外设页签 ${安全设置页签 === 'ts' ? '选中' : ''}" data-安全页签="ts" onclick="切安全页签('ts')">人机验证</button>
+    </nav>
+    <div class="卡片" data-安全面板="pwd" ${安全设置页签 === 'pwd' ? '' : 'hidden'}>
       <h2>登录密码</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">当前登录用户名：<b style="color:var(--文字)">${转义(账号.用户名 || '—')}</b>。改密后需重新登录（浏览器会重新弹出登录框）。</p>
       <div class="表单">
@@ -1225,7 +1243,7 @@ async function 设置_安全() {
       </div>
       <div style="margin-top:12px"><button class="btn" onclick="修改密码()">修改登录密码</button></div>
     </div>
-    <div class="卡片">
+    <div class="卡片" data-安全面板="ts" ${安全设置页签 === 'ts' ? '' : 'hidden'}>
       <h2>人机验证（Cloudflare Turnstile）${已开 ? ' <span class="徽章 已核收">已开启</span>' : ''}${密钥由环境 ? ' <span class="徽章">环境变量</span>' : ''}</h2>
       <p style="color:var(--次文字);font-size:13px;margin-bottom:12px">在 Cloudflare 后台申请 Turnstile 小组件（推荐选「不可见」模式，静默防爆破且不遮挡壁纸）。推荐通过服务端环境变量 <code>TURNSTILE_SITE_KEY</code> / <code>TURNSTILE_SECRET_KEY</code> 注入，其次存本地数据文件。</p>
       <div class="表单">
@@ -1797,7 +1815,13 @@ window.保存备案信息 = async function() {
 async function 设置_关于() {
   const v = await api('/api/version').catch(() => null);
   if (v) 当前版本信息 = v;   // 拉不到（更新重启中）就沿用上一次的，别把版本号抹成「未知」
-  return 设置_导出() + 在线更新卡片();
+  return `
+    <nav class="外设页签栏" style="margin-bottom:14px" role="tablist">
+      <button type="button" class="外设页签 ${关于页签 === 'backup' ? '选中' : ''}" data-关于页签="backup" onclick="切关于页签('backup')">数据备份与迁移</button>
+      <button type="button" class="外设页签 ${关于页签 === 'update' ? '选中' : ''}" data-关于页签="update" onclick="切关于页签('update')">版本与在线更新</button>
+    </nav>
+    <div data-关于面板="backup" ${关于页签 === 'backup' ? '' : 'hidden'}>${设置_导出()}</div>
+    <div data-关于面板="update" ${关于页签 === 'update' ? '' : 'hidden'}>${在线更新卡片()}</div>`;
 }
 window.切换主题 = function(新主题) {
   主题 = 新主题; localStorage.setItem('主题', 主题); 应用主题();
